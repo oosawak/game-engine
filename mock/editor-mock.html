@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Game Engine Mock</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1016;
+      --panel: #121824;
+      --panel-2: #161d2a;
+      --panel-3: #1b2332;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.14);
+      --text: #e7edf8;
+      --muted: #8f9bb0;
+      --accent: #6cc1ff;
+      --accent-2: #7cf0b7;
+      --warn: #ffce6a;
+      --danger: #ff7a7a;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --radius: 16px;
+      --radius-sm: 12px;
+      --topbar-h: 56px;
+      --footer-h: 86px;
+      --sidebar-w: 280px;
+      --inspector-w: 320px;
+      --gutter: 14px;
+      --font: "Avenir Next", "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(108, 193, 255, 0.12), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(124, 240, 183, 0.09), transparent 30%),
+        linear-gradient(180deg, #0b0e14 0%, #101421 100%);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body {
+      padding: 18px;
+    }
+
+    .mock {
+      min-height: calc(100vh - 36px);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)), var(--bg);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: var(--topbar-h) 1fr var(--footer-h);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .brand-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 0 4px rgba(108, 193, 255, 0.12);
+    }
+
+    .tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .tab {
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      padding: 10px 14px;
+      border-radius: 999px;
+      font: inherit;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .tab.active {
+      color: var(--text);
+      background: rgba(108, 193, 255, 0.12);
+      border-color: rgba(108, 193, 255, 0.24);
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .action-pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--inspector-w);
+      gap: var(--gutter);
+      padding: var(--gutter);
+      min-height: 0;
+    }
+
+    .panel {
+      min-width: 0;
+      min-height: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)), var(--panel);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mini-button {
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: 999px;
+      font: inherit;
+      font-size: 12px;
+    }
+
+    .panel-subtle {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .hierarchy,
+    .inspector,
+    .project {
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .panel-body {
+      min-height: 0;
+      padding: 12px;
+      overflow: auto;
+    }
+
+    .tree {
+      display: grid;
+      gap: 8px;
+    }
+
+    .tree-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid transparent;
+      color: var(--text);
+      font-size: 13px;
+      width: 100%;
+      text-align: left;
+      font: inherit;
+      appearance: none;
+    }
+
+    .tree-item.active {
+      border-color: rgba(108, 193, 255, 0.28);
+      background: rgba(108, 193, 255, 0.1);
+    }
+
+    .tree-item small {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .scene {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 0;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 12%),
+        radial-gradient(circle at center, rgba(255, 255, 255, 0.08), transparent 58%),
+        linear-gradient(180deg, #202a3a 0%, #171d29 100%);
+    }
+
+    .scene-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10, 12, 18, 0.42);
+      backdrop-filter: blur(14px);
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-button {
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 12px;
+      font: inherit;
+      font-size: 12px;
+    }
+
+    .toolbar-button.active {
+      background: rgba(124, 240, 183, 0.14);
+      border-color: rgba(124, 240, 183, 0.28);
+    }
+
+    .scene-canvas {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+    }
+
+    .scene-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+      background-size: 48px 48px;
+      opacity: 0.28;
+      mask-image: radial-gradient(circle at center, black 55%, transparent 100%);
+    }
+
+    .scene-stage {
+      position: relative;
+      width: min(70%, 720px);
+      aspect-ratio: 16 / 9;
+      border-radius: 28px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 18%),
+        radial-gradient(circle at 50% 20%, rgba(108, 193, 255, 0.22), transparent 26%),
+        linear-gradient(180deg, #2a3344 0%, #1a2030 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 24px 70px rgba(0, 0, 0, 0.35);
+      overflow: hidden;
+    }
+
+    .scene-stage::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 18%;
+      width: 38%;
+      height: 32%;
+      transform: translateX(-50%) perspective(500px) rotateX(62deg);
+      border-radius: 18px;
+      background:
+        linear-gradient(135deg, rgba(108, 193, 255, 0.34), rgba(124, 240, 183, 0.14)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 22px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 22px);
+      box-shadow: 0 0 0 8px rgba(124, 240, 183, 0.04);
+      opacity: 0.9;
+    }
+
+    .cube {
+      position: absolute;
+      left: 50%;
+      top: 48%;
+      width: 92px;
+      height: 92px;
+      transform: translate(-50%, -50%) rotate(18deg) skewX(-8deg);
+      background:
+        linear-gradient(145deg, #8fd2ff 0%, #5bb7ff 45%, #2c87dd 100%);
+      box-shadow:
+        18px 18px 0 rgba(0, 0, 0, 0.12),
+        0 18px 32px rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 12px;
+    }
+
+    .cube::before,
+    .cube::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      border: inherit;
+    }
+
+    .cube::before {
+      transform: translate(14px, -14px);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.02));
+      z-index: -1;
+    }
+
+    .cube::after {
+      transform: translate(28px, -28px);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.01));
+      z-index: -2;
+    }
+
+    .cube-instance {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 96px;
+      height: 96px;
+      transform-style: preserve-3d;
+      transform:
+        translate(-50%, -50%)
+        rotateX(var(--rx, 0deg))
+        rotateY(var(--ry, 0deg))
+        rotateZ(var(--rz, 0deg))
+        scale3d(var(--sx, 1), var(--sy, 1), 1);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.04)),
+        linear-gradient(145deg, #8fd2ff 0%, #5bb7ff 45%, #2c87dd 100%);
+      box-shadow:
+        14px 14px 0 rgba(0, 0, 0, 0.12),
+        0 18px 32px rgba(0, 0, 0, 0.3);
+      cursor: grab;
+      user-select: none;
+    }
+
+    .cube-instance:active {
+      cursor: grabbing;
+    }
+
+    .cube-instance.selected {
+      outline: 2px solid rgba(124, 240, 183, 0.8);
+      outline-offset: 4px;
+      box-shadow:
+        0 0 0 8px rgba(124, 240, 183, 0.12),
+        14px 14px 0 rgba(0, 0, 0, 0.12),
+        0 18px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .cube-label {
+      position: absolute;
+      left: 50%;
+      top: -34px;
+      transform: translateX(-50%);
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(14, 18, 27, 0.84);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 11px;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .gizmo {
+      position: absolute;
+      left: 20px;
+      bottom: 20px;
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(14, 18, 27, 0.7);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(14px);
+    }
+
+    .gizmo-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .axis {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .axis.x { background: #ff7a7a; }
+    .axis.y { background: #7cf0b7; }
+    .axis.z { background: #6cc1ff; }
+
+    .overlay-top,
+    .overlay-left {
+      position: absolute;
+      pointer-events: none;
+      display: flex;
+      gap: 10px;
+      z-index: 1;
+    }
+
+    .overlay-top {
+      top: 18px;
+      left: 18px;
+      right: 18px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .overlay-left {
+      top: 18px;
+      left: 18px;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .overlay-badge {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(14, 18, 27, 0.72);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 12px;
+      backdrop-filter: blur(14px);
+    }
+
+    .overlay-badge strong {
+      color: var(--accent-2);
+      font-weight: 700;
+    }
+
+    .property-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .property {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .property-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .inputs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .input {
+      min-width: 0;
+      padding: 11px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(9, 12, 19, 0.85);
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .input::placeholder {
+      color: #5f6b7d;
+    }
+
+    .footer {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      border-top: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+      min-height: 0;
+    }
+
+    .footer-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 14px;
+      border-right: 1px solid var(--border);
+    }
+
+    .footer-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-2);
+      box-shadow: 0 0 0 4px rgba(124, 240, 183, 0.15);
+    }
+
+    .project-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .asset-card {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .asset-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background:
+        linear-gradient(135deg, rgba(108, 193, 255, 0.22), rgba(124, 240, 183, 0.18)),
+        rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .asset-title {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .asset-meta {
+      margin-top: 3px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    @media (max-width: 1200px) {
+      :root {
+        --sidebar-w: 240px;
+        --inspector-w: 280px;
+      }
+    }
+
+    @media (max-width: 960px) {
+      body {
+        padding: 10px;
+      }
+
+      .mock {
+        min-height: calc(100vh - 20px);
+        grid-template-rows: auto auto auto auto;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .footer {
+        grid-template-columns: 1fr;
+      }
+
+      .footer-nav {
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="mock">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        Game Engine Mock
+      </div>
+      <nav class="tabs" aria-label="Editor tabs">
+        <button class="tab active" type="button">Scene</button>
+        <button class="tab" type="button">Package</button>
+        <button class="tab" type="button">Documentation</button>
+        <button class="tab" type="button">Play</button>
+        <button class="tab" type="button">Build</button>
+      </nav>
+      <div class="topbar-actions">
+        <span class="action-pill">fps 60</span>
+        <span class="action-pill">ready</span>
+      </div>
+    </header>
+
+    <section class="workspace" aria-label="Editor workspace">
+      <aside class="panel hierarchy" aria-label="Hierarchy">
+        <div class="panel-header">
+          <span>Hierarchy</span>
+          <div class="panel-actions">
+            <span class="panel-subtle">Scene objects</span>
+            <button class="mini-button" type="button" id="addCubeButton">+ Cube</button>
+          </div>
+        </div>
+        <div class="panel-body" id="hierarchyList"></div>
+      </aside>
+
+      <section class="panel scene" aria-label="Scene View">
+        <div class="scene-toolbar">
+          <div class="toolbar-group">
+            <button class="toolbar-button active" type="button">Scene View</button>
+            <button class="toolbar-button" type="button">Game View</button>
+          </div>
+          <div class="toolbar-group">
+            <button class="toolbar-button" type="button">Move</button>
+            <button class="toolbar-button" type="button">Rotate</button>
+            <button class="toolbar-button" type="button">Scale</button>
+          </div>
+        </div>
+
+        <div class="scene-canvas" id="sceneCanvas">
+          <div class="scene-grid"></div>
+          <div class="overlay-top">
+            <span class="overlay-badge"><strong>Scene</strong> / MainScene</span>
+            <span class="overlay-badge" id="selectionBadge">Selection: Cube</span>
+            <span class="overlay-badge">Replay: off</span>
+          </div>
+          <div class="overlay-left">
+            <span class="overlay-badge">FPS <strong id="fpsValue">60</strong></span>
+            <span class="overlay-badge">Delta <strong id="deltaValue">16.6 ms</strong></span>
+          </div>
+          <div class="scene-stage" id="sceneStage" aria-hidden="true"></div>
+          <div class="gizmo" aria-hidden="true">
+            <div class="gizmo-row"><span class="axis x"></span> X axis</div>
+            <div class="gizmo-row"><span class="axis y"></span> Y axis</div>
+            <div class="gizmo-row"><span class="axis z"></span> Z axis</div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel inspector" aria-label="Inspector">
+        <div class="panel-header">
+          <span>Inspector</span>
+          <span class="panel-subtle" id="inspectorObjectName">Cube</span>
+        </div>
+        <div class="panel-body">
+          <div class="property-list">
+            <section class="property">
+              <div class="property-header">
+                <span>Transform</span>
+                <span>editable</span>
+              </div>
+              <div class="inputs">
+                <input class="input" id="positionX" type="number" step="0.1" value="0.0" aria-label="Position X" />
+                <input class="input" id="positionY" type="number" step="0.1" value="1.0" aria-label="Position Y" />
+                <input class="input" id="positionZ" type="number" step="0.1" value="0.0" aria-label="Position Z" />
+              </div>
+            </section>
+
+            <section class="property">
+              <div class="property-header">
+                <span>Rotation</span>
+                <span>degrees</span>
+              </div>
+              <div class="inputs">
+                <input class="input" id="rotationX" type="number" step="0.1" value="0.0" aria-label="Rotation X" />
+                <input class="input" id="rotationY" type="number" step="0.1" value="45.0" aria-label="Rotation Y" />
+                <input class="input" id="rotationZ" type="number" step="0.1" value="0.0" aria-label="Rotation Z" />
+              </div>
+            </section>
+
+            <section class="property">
+              <div class="property-header">
+                <span>Scale</span>
+                <span>size</span>
+              </div>
+              <div class="inputs">
+                <input class="input" id="scaleX" type="number" step="0.1" min="0.1" value="1.0" aria-label="Scale X" />
+                <input class="input" id="scaleY" type="number" step="0.1" min="0.1" value="1.0" aria-label="Scale Y" />
+                <input class="input" id="scaleZ" type="number" step="0.1" min="0.1" value="1.0" aria-label="Scale Z" />
+              </div>
+            </section>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <footer class="footer" aria-label="Bottom panels">
+      <div class="footer-nav">
+        <span class="tab active">Project</span>
+        <span class="tab">Assets</span>
+      </div>
+      <div class="panel project" style="border:0;border-radius:0;background:transparent;">
+        <div class="panel-header">
+          <span>Project</span>
+          <span class="panel-subtle">Assets</span>
+        </div>
+        <div class="panel-body">
+          <div class="project-grid">
+            <div class="asset-card">
+              <div class="asset-icon"></div>
+              <div>
+                <div class="asset-title">cube.prefab</div>
+                <div class="asset-meta">Scene object template</div>
+              </div>
+            </div>
+            <div class="asset-card">
+              <div class="asset-icon"></div>
+              <div>
+                <div class="asset-title">materials/</div>
+                <div class="asset-meta">Shader and material assets</div>
+              </div>
+            </div>
+            <div class="asset-card">
+              <div class="asset-icon"></div>
+              <div>
+                <div class="asset-title">scenes/</div>
+                <div class="asset-meta">MainScene, DemoScene</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer-main">
+        <div class="status">
+          <span class="status-dot"></span>
+          <span id="statusText">Scene ready</span>
+        </div>
+        <div>Cube selected · Inspector editable · Layout and state mock</div>
+      </div>
+    </footer>
+  </main>
+
+  <script>
+    (() => {
+      const hierarchyList = document.getElementById("hierarchyList");
+      const sceneCanvas = document.getElementById("sceneCanvas");
+      const sceneStage = document.getElementById("sceneStage");
+      const addCubeButton = document.getElementById("addCubeButton");
+      const selectionBadge = document.getElementById("selectionBadge");
+      const inspectorObjectName = document.getElementById("inspectorObjectName");
+      const statusText = document.getElementById("statusText");
+      const fpsValue = document.getElementById("fpsValue");
+      const deltaValue = document.getElementById("deltaValue");
+
+      const inputs = {
+        positionX: document.getElementById("positionX"),
+        positionY: document.getElementById("positionY"),
+        positionZ: document.getElementById("positionZ"),
+        rotationX: document.getElementById("rotationX"),
+        rotationY: document.getElementById("rotationY"),
+        rotationZ: document.getElementById("rotationZ"),
+        scaleX: document.getElementById("scaleX"),
+        scaleY: document.getElementById("scaleY"),
+        scaleZ: document.getElementById("scaleZ"),
+      };
+
+      const bindings = {
+        positionX: ["position", "x"],
+        positionY: ["position", "y"],
+        positionZ: ["position", "z"],
+        rotationX: ["rotation", "x"],
+        rotationY: ["rotation", "y"],
+        rotationZ: ["rotation", "z"],
+        scaleX: ["scale", "x"],
+        scaleY: ["scale", "y"],
+        scaleZ: ["scale", "z"],
+      };
+
+      const state = {
+        nextId: 1,
+        selectedId: null,
+        dragging: null,
+        fps: 60,
+        delta: 16.6,
+        objects: [],
+      };
+
+      function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+      }
+
+      function createCube(name) {
+        const index = state.nextId++;
+        return {
+          id: `cube-${index}`,
+          name: name ?? `Cube ${index}`,
+          position: { x: 48 + index * 3, y: 46 + index * 2, z: 0 },
+          rotation: { x: 0, y: 18 * index, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+        };
+      }
+
+      function getSelectedObject() {
+        return state.objects.find((object) => object.id === state.selectedId) ?? null;
+      }
+
+      function ensureSelection() {
+        if (state.selectedId && getSelectedObject()) {
+          return;
+        }
+
+        const fallback = state.objects[0] ?? null;
+        state.selectedId = fallback ? fallback.id : null;
+      }
+
+      function setSelection(id) {
+        state.selectedId = id;
+        render();
+      }
+
+      function addCube() {
+        const cube = createCube();
+        state.objects.push(cube);
+        state.selectedId = cube.id;
+        statusText.textContent = `${cube.name} added`;
+        render();
+      }
+
+      function updateInspectorField(inputId, rawValue) {
+        const object = getSelectedObject();
+        if (!object) {
+          return;
+        }
+
+        const parsed = Number(rawValue);
+        if (Number.isNaN(parsed)) {
+          return;
+        }
+
+        const [group, axis] = bindings[inputId];
+        object[group][axis] = group === "scale" ? Math.max(0.1, parsed) : parsed;
+        render();
+      }
+
+      function syncInspector() {
+        const object = getSelectedObject();
+        if (!object) {
+          inspectorObjectName.textContent = "None";
+          selectionBadge.textContent = "Selection: none";
+          return;
+        }
+
+        inspectorObjectName.textContent = object.name;
+        selectionBadge.textContent = `Selection: ${object.name}`;
+
+        inputs.positionX.value = object.position.x.toFixed(1);
+        inputs.positionY.value = object.position.y.toFixed(1);
+        inputs.positionZ.value = object.position.z.toFixed(1);
+        inputs.rotationX.value = object.rotation.x.toFixed(1);
+        inputs.rotationY.value = object.rotation.y.toFixed(1);
+        inputs.rotationZ.value = object.rotation.z.toFixed(1);
+        inputs.scaleX.value = object.scale.x.toFixed(1);
+        inputs.scaleY.value = object.scale.y.toFixed(1);
+        inputs.scaleZ.value = object.scale.z.toFixed(1);
+      }
+
+      function renderHierarchy() {
+        hierarchyList.innerHTML = "";
+
+        const tree = document.createElement("div");
+        tree.className = "tree";
+
+        state.objects.forEach((object) => {
+          const item = document.createElement("button");
+          item.type = "button";
+          item.className = `tree-item${object.id === state.selectedId ? " active" : ""}`;
+          item.innerHTML = `<span>${object.name}</span><small>cube</small>`;
+          item.addEventListener("click", () => setSelection(object.id));
+          tree.appendChild(item);
+        });
+
+        hierarchyList.appendChild(tree);
+      }
+
+      function renderScene() {
+        sceneStage.innerHTML = "";
+
+        state.objects.forEach((object) => {
+          const cube = document.createElement("button");
+          cube.type = "button";
+          cube.className = `cube-instance${object.id === state.selectedId ? " selected" : ""}`;
+          cube.dataset.id = object.id;
+          cube.style.left = `${object.position.x}%`;
+          cube.style.top = `${object.position.y}%`;
+          cube.style.setProperty("--rx", `${object.rotation.x}deg`);
+          cube.style.setProperty("--ry", `${object.rotation.y}deg`);
+          cube.style.setProperty("--rz", `${object.rotation.z}deg`);
+          cube.style.setProperty("--sx", object.scale.x);
+          cube.style.setProperty("--sy", object.scale.y);
+          cube.innerHTML = `<span class="cube-label">${object.name}</span>`;
+          cube.addEventListener("click", (event) => {
+            event.stopPropagation();
+            setSelection(object.id);
+          });
+          cube.addEventListener("pointerdown", (event) => {
+            event.preventDefault();
+            setSelection(object.id);
+            beginDrag(event, object.id);
+          });
+          sceneStage.appendChild(cube);
+        });
+      }
+
+      function renderStatus() {
+        fpsValue.textContent = String(state.fps);
+        deltaValue.textContent = `${state.delta.toFixed(1)} ms`;
+      }
+
+      function render() {
+        ensureSelection();
+        renderHierarchy();
+        renderScene();
+        syncInspector();
+        renderStatus();
+      }
+
+      function beginDrag(event, objectId) {
+        const object = state.objects.find((item) => item.id === objectId);
+        if (!object) {
+          return;
+        }
+
+        const rect = sceneStage.getBoundingClientRect();
+        state.dragging = {
+          pointerId: event.pointerId,
+          objectId,
+          startX: event.clientX,
+          startY: event.clientY,
+          originX: object.position.x,
+          originY: object.position.y,
+          width: rect.width,
+          height: rect.height,
+        };
+
+        sceneCanvas.setPointerCapture(event.pointerId);
+      }
+
+      function updateDrag(event) {
+        if (!state.dragging || state.dragging.pointerId !== event.pointerId) {
+          return;
+        }
+
+        const object = state.objects.find((item) => item.id === state.dragging.objectId);
+        if (!object) {
+          return;
+        }
+
+        const dx = ((event.clientX - state.dragging.startX) / state.dragging.width) * 100;
+        const dy = ((event.clientY - state.dragging.startY) / state.dragging.height) * 100;
+        object.position.x = clamp(state.dragging.originX + dx, 0, 100);
+        object.position.y = clamp(state.dragging.originY + dy, 0, 100);
+        render();
+      }
+
+      function endDrag(event) {
+        if (!state.dragging || state.dragging.pointerId !== event.pointerId) {
+          return;
+        }
+
+        state.dragging = null;
+        if (sceneCanvas.hasPointerCapture(event.pointerId)) {
+          sceneCanvas.releasePointerCapture(event.pointerId);
+        }
+      }
+
+      addCubeButton.addEventListener("click", addCube);
+      sceneCanvas.addEventListener("pointermove", updateDrag);
+      sceneCanvas.addEventListener("pointerup", endDrag);
+      sceneCanvas.addEventListener("pointercancel", endDrag);
+      sceneCanvas.addEventListener("click", (event) => {
+        if (event.target === sceneCanvas || event.target === sceneStage) {
+          ensureSelection();
+          render();
+        }
+      });
+
+      Object.entries(inputs).forEach(([inputId, input]) => {
+        input.addEventListener("input", () => updateInspectorField(inputId, input.value));
+      });
+
+      state.objects.push(createCube("Cube"));
+      state.selectedId = state.objects[0].id;
+      render();
+    })();
+  </script>
+</body>
+</html>

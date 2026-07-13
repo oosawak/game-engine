@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Game Engine Docs</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1016;
+      --panel: #121824;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e7edf8;
+      --muted: #8f9bb0;
+      --accent: #6cc1ff;
+      --accent-2: #7cf0b7;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --font: "Avenir Next", "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(108, 193, 255, 0.12), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(124, 240, 183, 0.09), transparent 30%),
+        linear-gradient(180deg, #0b0e14 0%, #101421 100%);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .card {
+      width: min(920px, 100%);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 28px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)), var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+      letter-spacing: 0.02em;
+    }
+
+    p {
+      margin: 0 0 22px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .links {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+    }
+
+    .link {
+      display: block;
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      text-decoration: none;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .link strong {
+      display: block;
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+
+    .link span {
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 13px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      margin-bottom: 16px;
+      background: rgba(108, 193, 255, 0.12);
+      border: 1px solid rgba(108, 193, 255, 0.24);
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="badge"><span class="dot"></span> Public Docs</div>
+    <h1>Game Engine</h1>
+    <p>公開用の入口です。実装モックと設計資料をここから開けます。</p>
+    <div class="links">
+      <a class="link" href="./editor-three.html">
+        <strong>Editor Mock</strong>
+        <span>Cube の追加、Inspector 編集、2D / 3D 切り替え、スクリプト実行を確認できます。</span>
+      </a>
+      <a class="link" href="./explanation.html">
+        <strong>Explanation</strong>
+        <span>動画を使って、画面構成と操作の流れを説明するページです。</span>
+      </a>
+      <a class="link" href="../README.md">
+        <strong>Repository README</strong>
+        <span>リポジトリの概要を確認できます。</span>
+      </a>
+    </div>
+  </main>
+</body>
+</html>

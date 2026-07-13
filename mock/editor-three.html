@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Game Engine Mock - three.js</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1016;
+      --panel: #121824;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e7edf8;
+      --muted: #8f9bb0;
+      --accent: #6cc1ff;
+      --accent-2: #7cf0b7;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --radius: 16px;
+      --topbar-h: 56px;
+      --footer-h: 282px;
+      --sidebar-w: 280px;
+      --inspector-w: 320px;
+      --gutter: 14px;
+      --font: "Avenir Next", "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(108, 193, 255, 0.12), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(124, 240, 183, 0.09), transparent 30%),
+        linear-gradient(180deg, #0b0e14 0%, #101421 100%);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body { padding: 18px; }
+
+    .mock {
+      min-height: calc(100vh - 36px);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)), var(--bg);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: var(--topbar-h) 1fr var(--footer-h);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .brand-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 0 4px rgba(108, 193, 255, 0.12);
+    }
+
+    .tabs, .topbar-actions, .panel-actions, .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tabs {
+      min-width: 0;
+      overflow: hidden;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .tab, .toolbar-button, .mini-button {
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      padding: 9px 12px;
+      border-radius: 999px;
+      font: inherit;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .tab.active, .toolbar-button.active {
+      color: var(--text);
+      background: rgba(108, 193, 255, 0.12);
+      border-color: rgba(108, 193, 255, 0.24);
+    }
+
+    .mini-button.active {
+      color: var(--text);
+      background: rgba(124, 240, 183, 0.14);
+      border-color: rgba(124, 240, 183, 0.28);
+    }
+
+    .mini-button {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .action-pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--inspector-w);
+      gap: var(--gutter);
+      padding: var(--gutter);
+      min-height: 0;
+    }
+
+    .panel {
+      min-width: 0;
+      min-height: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)), var(--panel);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .panel-subtle {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .panel-body {
+      min-height: 0;
+      padding: 12px;
+      overflow: auto;
+    }
+
+    .tree {
+      display: grid;
+      gap: 8px;
+    }
+
+    .tree-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      text-align: left;
+      appearance: none;
+    }
+
+    .tree-item.active {
+      border-color: rgba(108, 193, 255, 0.28);
+      background: rgba(108, 193, 255, 0.1);
+    }
+
+    .tree-item small {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .scene {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 12%),
+        radial-gradient(circle at center, rgba(255, 255, 255, 0.08), transparent 58%),
+        linear-gradient(180deg, #202a3a 0%, #171d29 100%);
+    }
+
+    .scene-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10, 12, 18, 0.42);
+      backdrop-filter: blur(14px);
+    }
+
+    .scene-shell {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .viewport {
+      position: absolute;
+      inset: 0;
+    }
+
+    .overlay-top, .overlay-left, .gizmo {
+      position: absolute;
+      z-index: 2;
+      pointer-events: none;
+      display: flex;
+      gap: 10px;
+    }
+
+    .overlay-top {
+      top: 18px;
+      left: 18px;
+      right: 18px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .overlay-left {
+      top: 18px;
+      left: 18px;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .gizmo {
+      left: 20px;
+      bottom: 20px;
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(14, 18, 27, 0.7);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(14px);
+    }
+
+    .gizmo-row, .overlay-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .overlay-badge {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(14, 18, 27, 0.72);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(14px);
+    }
+
+    .overlay-badge strong {
+      color: var(--accent-2);
+    }
+
+    .axis {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .axis.x { background: #ff7a7a; }
+    .axis.y { background: #7cf0b7; }
+    .axis.z { background: #6cc1ff; }
+
+    .property-list { display: grid; gap: 12px; }
+
+    .property {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .property-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .inputs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .input {
+      min-width: 0;
+      padding: 11px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(9, 12, 19, 0.85);
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .input::placeholder { color: #5f6b7d; }
+
+    .footer {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr) auto;
+      border-top: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+      min-height: 0;
+    }
+
+    .footer-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 14px;
+      border-right: 1px solid var(--border);
+    }
+
+    .footer-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      color: var(--muted);
+      font-size: 12px;
+      grid-column: 1 / -1;
+      border-top: 1px solid var(--border);
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-2);
+      box-shadow: 0 0 0 4px rgba(124, 240, 183, 0.15);
+    }
+
+    .project-grid { display: grid; gap: 10px; }
+
+    .project-layout {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      min-height: 0;
+    }
+
+    .project-info {
+      display: grid;
+      gap: 10px;
+      border-right: 1px solid var(--border);
+    }
+
+    .info-card {
+      display: grid;
+      gap: 6px;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .info-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .info-value {
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 600;
+      word-break: break-word;
+    }
+
+    .script-panel {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .script-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .script-editor {
+      display: grid;
+      gap: 8px;
+      min-height: 0;
+    }
+
+    .script-textarea {
+      width: 100%;
+      min-height: 132px;
+      resize: vertical;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(9, 12, 19, 0.95);
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 12px;
+      tab-size: 2;
+    }
+
+    .script-log {
+      margin: 0;
+      min-height: 0;
+      overflow: auto;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(9, 12, 19, 0.72);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+
+    .asset-card {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .asset-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(108, 193, 255, 0.22), rgba(124, 240, 183, 0.18)), rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .asset-title { font-size: 13px; font-weight: 600; }
+    .asset-meta { margin-top: 3px; font-size: 12px; color: var(--muted); }
+
+    @media (max-width: 1200px) {
+      :root { --sidebar-w: 240px; --inspector-w: 280px; }
+    }
+
+    @media (max-width: 960px) {
+      body { padding: 10px; }
+      .mock { min-height: calc(100vh - 20px); grid-template-rows: auto auto auto auto; }
+      .workspace, .footer { grid-template-columns: 1fr; }
+      .footer-nav { border-right: 0; border-bottom: 1px solid var(--border); }
+      .project-layout { grid-template-columns: 1fr; }
+      .project-info { border-right: 0; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="mock">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        Game Engine Mock
+      </div>
+      <nav class="tabs" aria-label="Editor tabs">
+        <button class="tab active" type="button">Scene</button>
+        <button class="tab" type="button">Package</button>
+        <button class="tab" type="button">Documentation</button>
+        <button class="tab" type="button">Play</button>
+        <button class="tab" type="button">Build</button>
+      </nav>
+      <div class="topbar-actions">
+        <button class="tab active" id="mode2dButton" type="button">2D</button>
+        <button class="tab" id="mode3dButton" type="button">3D</button>
+        <span class="action-pill" id="fpsValue">fps 60</span>
+        <span class="action-pill" id="modeStatus">3D mode</span>
+      </div>
+    </header>
+
+    <section class="workspace" aria-label="Editor workspace">
+      <aside class="panel" aria-label="Hierarchy">
+        <div class="panel-header">
+          <span>Hierarchy</span>
+          <div class="panel-actions">
+            <span class="panel-subtle">Scene objects</span>
+            <button class="mini-button" id="addCubeButton" type="button">+ Cube</button>
+          </div>
+        </div>
+        <div class="panel-body" id="hierarchyList"></div>
+      </aside>
+
+      <section class="panel scene" aria-label="Scene View">
+        <div class="scene-toolbar">
+          <div class="toolbar-group">
+            <button class="toolbar-button active" type="button">Scene View</button>
+            <button class="toolbar-button" type="button">Game View</button>
+          </div>
+          <div class="toolbar-group">
+            <button class="toolbar-button" type="button" id="modeToggle">Toggle 2D / 3D</button>
+            <button class="toolbar-button active" type="button" id="moveToolButton">Move</button>
+          </div>
+        </div>
+
+        <div class="scene-shell" id="sceneShell">
+          <div class="viewport" id="viewport"></div>
+          <div class="overlay-top">
+            <span class="overlay-badge"><strong>Scene</strong> / MainScene</span>
+            <span class="overlay-badge" id="selectionBadge">Selection: Cube</span>
+            <span class="overlay-badge" id="viewModeBadge">View: 3D</span>
+          </div>
+          <div class="overlay-left">
+            <span class="overlay-badge">FPS <strong id="fpsOverlay">60</strong></span>
+            <span class="overlay-badge">Delta <strong id="deltaValue">16.6 ms</strong></span>
+          </div>
+          <div class="gizmo" aria-hidden="true">
+            <div class="gizmo-row"><span class="axis x"></span> X axis</div>
+            <div class="gizmo-row"><span class="axis y"></span> Y axis</div>
+            <div class="gizmo-row"><span class="axis z"></span> Z axis</div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel" aria-label="Inspector">
+        <div class="panel-header">
+          <span>Inspector</span>
+          <span class="panel-subtle" id="inspectorObjectName">Cube</span>
+        </div>
+        <div class="panel-body">
+          <div class="property-list">
+            <section class="property">
+              <div class="property-header"><span>Transform</span><span>editable</span></div>
+              <div class="inputs">
+                <input class="input" id="positionX" type="number" step="0.1" value="0.0" aria-label="Position X" />
+                <input class="input" id="positionY" type="number" step="0.1" value="0.5" aria-label="Position Y" />
+                <input class="input" id="positionZ" type="number" step="0.1" value="0.0" aria-label="Position Z" />
+              </div>
+            </section>
+            <section class="property">
+              <div class="property-header"><span>Rotation</span><span>degrees</span></div>
+              <div class="inputs">
+                <input class="input" id="rotationX" type="number" step="0.1" value="0.0" aria-label="Rotation X" />
+                <input class="input" id="rotationY" type="number" step="0.1" value="45.0" aria-label="Rotation Y" />
+                <input class="input" id="rotationZ" type="number" step="0.1" value="0.0" aria-label="Rotation Z" />
+              </div>
+            </section>
+            <section class="property">
+              <div class="property-header"><span>Scale</span><span>size</span></div>
+              <div class="inputs">
+                <input class="input" id="scaleX" type="number" step="0.1" min="0.1" value="1.0" aria-label="Scale X" />
+                <input class="input" id="scaleY" type="number" step="0.1" min="0.1" value="1.0" aria-label="Scale Y" />
+                <input class="input" id="scaleZ" type="number" step="0.1" min="0.1" value="1.0" aria-label="Scale Z" />
+              </div>
+            </section>
+            <section class="property">
+              <div class="property-header">
+                <span>Script</span>
+                <span id="scriptMode">selected cube</span>
+              </div>
+              <div class="script-editor">
+                <textarea class="script-textarea" id="scriptSource" spellcheck="false"></textarea>
+              </div>
+              <pre class="script-log" id="scriptLog">Script ready.</pre>
+            </section>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <footer class="footer" aria-label="Bottom panels">
+      <div class="footer-nav">
+        <span class="tab active">Project</span>
+        <span class="tab">Assets</span>
+      </div>
+      <div class="panel" style="border:0;border-radius:0;background:transparent;">
+        <div class="panel-header">
+          <span>Project</span>
+          <div class="panel-actions">
+            <span class="panel-subtle" id="projectStatus">orbit-loop.js ready</span>
+            <button class="mini-button" id="runScriptButton" type="button">Run</button>
+            <button class="mini-button" id="playButton" type="button">Play</button>
+            <button class="mini-button" id="stopButton" type="button">Stop</button>
+          </div>
+        </div>
+        <div class="panel-body project-layout">
+          <section class="project-info">
+            <div class="info-card">
+              <div class="info-label">File</div>
+              <div class="info-value">mock/editor-three.html</div>
+            </div>
+            <div class="info-card">
+              <div class="info-label">Engine</div>
+              <div class="info-value">three.js / browser runtime</div>
+            </div>
+            <div class="info-card">
+              <div class="info-label">View modes</div>
+              <div class="info-value">2D / 3D switch enabled</div>
+            </div>
+            <div class="info-card">
+              <div class="info-label">Script</div>
+              <div class="info-value">scripts/orbit-loop.js</div>
+            </div>
+            <div class="project-grid">
+              <div class="asset-card">
+                <div class="asset-icon"></div>
+                <div>
+                  <div class="asset-title">cube.prefab</div>
+                  <div class="asset-meta">Scene object template</div>
+                </div>
+              </div>
+              <div class="asset-card">
+                <div class="asset-icon"></div>
+                <div>
+                  <div class="asset-title">scenes/</div>
+                  <div class="asset-meta">MainScene, DemoScene</div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <div class="footer-main">
+        <div class="status">
+          <span class="status-dot"></span>
+          <span id="statusText">Scene ready</span>
+        </div>
+        <div>Cube selected · Inspector editable · script execution enabled</div>
+      </div>
+    </footer>
+  </main>
+
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.167.1/build/three.module.js";
+
+    const viewport = document.getElementById("viewport");
+    const sceneShell = document.getElementById("sceneShell");
+    const hierarchyList = document.getElementById("hierarchyList");
+    const addCubeButton = document.getElementById("addCubeButton");
+    const modeToggle = document.getElementById("modeToggle");
+    const mode2dButton = document.getElementById("mode2dButton");
+    const mode3dButton = document.getElementById("mode3dButton");
+    const viewModeBadge = document.getElementById("viewModeBadge");
+    const modeStatus = document.getElementById("modeStatus");
+    const selectionBadge = document.getElementById("selectionBadge");
+    const inspectorObjectName = document.getElementById("inspectorObjectName");
+    const statusText = document.getElementById("statusText");
+    const fpsValue = document.getElementById("fpsValue");
+    const fpsOverlay = document.getElementById("fpsOverlay");
+    const deltaValue = document.getElementById("deltaValue");
+    const projectStatus = document.getElementById("projectStatus");
+    const runScriptButton = document.getElementById("runScriptButton");
+    const playButton = document.getElementById("playButton");
+    const stopButton = document.getElementById("stopButton");
+    const scriptSource = document.getElementById("scriptSource");
+    const scriptLog = document.getElementById("scriptLog");
+    const scriptMode = document.getElementById("scriptMode");
+
+    const STORAGE_KEY = "game-engine-orbit-script-v2";
+    const DEFAULT_SCRIPT = `const angle = context.time * context.speed;
+const radius = context.radius + context.offset;
+const height = context.height;
+const phase = context.phase;
+
+if (context.mode === "2d") {
+  object.position.x = Math.cos(angle + phase) * radius;
+  object.position.y = Math.sin(angle + phase) * radius;
+  object.position.z = 0;
+} else {
+  object.position.x = Math.cos(angle + phase) * radius;
+  object.position.y = height;
+  object.position.z = Math.sin(angle + phase) * radius;
+}
+
+object.rotation.y = angle * 57.2957795;`;
+
+    const inputs = {
+      positionX: document.getElementById("positionX"),
+      positionY: document.getElementById("positionY"),
+      positionZ: document.getElementById("positionZ"),
+      rotationX: document.getElementById("rotationX"),
+      rotationY: document.getElementById("rotationY"),
+      rotationZ: document.getElementById("rotationZ"),
+      scaleX: document.getElementById("scaleX"),
+      scaleY: document.getElementById("scaleY"),
+      scaleZ: document.getElementById("scaleZ"),
+    };
+
+    const state = {
+      mode: "3d",
+      nextId: 1,
+      selectedId: null,
+      objects: [],
+      dragging: null,
+      fps: 60,
+      delta: 16.6,
+      playing: false,
+      elapsed: 0,
+    };
+
+    const project = {
+      lastError: "",
+      lastCompiled: "",
+    };
+
+    scriptSource.value = loadScriptDraft();
+    scriptMode.textContent = "selected cube";
+
+    const THREE_STATE = {
+      scene: new THREE.Scene(),
+      renderer: new THREE.WebGLRenderer({ antialias: true, alpha: true }),
+      camera2d: new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, 1000),
+      camera3d: new THREE.PerspectiveCamera(45, 1, 0.1, 1000),
+      raycaster: new THREE.Raycaster(),
+      pointer: new THREE.Vector2(),
+      dragPlane: new THREE.Plane(),
+      dragOffset: new THREE.Vector3(),
+      ambient: new THREE.AmbientLight(0xffffff, 1.2),
+      directional: new THREE.DirectionalLight(0xffffff, 1.6),
+      grid2d: new THREE.GridHelper(20, 20, 0x47729b, 0x2a3549),
+      grid3d: new THREE.GridHelper(20, 20, 0x47729b, 0x2a3549),
+      axis: new THREE.AxesHelper(3),
+    };
+
+    THREE_STATE.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    THREE_STATE.renderer.setClearColor(0x000000, 0);
+    viewport.appendChild(THREE_STATE.renderer.domElement);
+    THREE_STATE.scene.add(THREE_STATE.ambient);
+    THREE_STATE.scene.add(THREE_STATE.directional);
+    THREE_STATE.scene.add(THREE_STATE.grid2d);
+    THREE_STATE.scene.add(THREE_STATE.grid3d);
+    THREE_STATE.scene.add(THREE_STATE.axis);
+
+    THREE_STATE.grid2d.rotation.x = Math.PI / 2;
+    THREE_STATE.grid2d.visible = false;
+    THREE_STATE.grid3d.visible = true;
+    THREE_STATE.axis.visible = true;
+
+    THREE_STATE.directional.position.set(6, 8, 5);
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function loadScriptDraft() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (!saved) {
+          return DEFAULT_SCRIPT;
+        }
+
+        if (!saved.includes("phase") || !saved.includes("offset")) {
+          return DEFAULT_SCRIPT;
+        }
+
+        return saved;
+      } catch {
+        return DEFAULT_SCRIPT;
+      }
+    }
+
+    function saveScriptDraft(value) {
+      try {
+        localStorage.setItem(STORAGE_KEY, value);
+      } catch {
+        return;
+      }
+    }
+
+    function setProjectMessage(message, error = false) {
+      projectStatus.textContent = message;
+      scriptLog.textContent = message;
+      scriptLog.style.color = error ? "#ff9a9a" : "var(--muted)";
+    }
+
+    function compileObjectScript(object, source) {
+      const scriptText = (source ?? object.scriptSource ?? "").trim();
+
+      try {
+        object.scriptSource = scriptText;
+        object.scriptFn = new Function("object", "context", "THREE", scriptText);
+        object.scriptError = "";
+        object.scriptVersion = (object.scriptVersion ?? 0) + 1;
+        return true;
+      } catch (error) {
+        object.scriptFn = null;
+        object.scriptError = String(error);
+        return false;
+      }
+    }
+
+    function getSelectedOrFirstObject() {
+      return getSelectedObject() ?? state.objects[0] ?? null;
+    }
+
+    function compileScript() {
+      const object = getSelectedOrFirstObject();
+      if (!object) {
+        setProjectMessage("No cube selected.", true);
+        return false;
+      }
+
+      const source = scriptSource.value.trim();
+      saveScriptDraft(source);
+      project.lastCompiled = source;
+      project.lastError = "";
+
+      if (!compileObjectScript(object, source)) {
+        project.lastError = `${object.name}: ${object.scriptError}`;
+        setProjectMessage(`Script error on ${object.name}.`, true);
+        return false;
+      }
+
+      setProjectMessage(`Script compiled for ${object.name}.`, false);
+      return true;
+    }
+
+    function compileAllScripts() {
+      let compiledCount = 0;
+      let failedName = "";
+      let failedError = "";
+
+      for (const object of state.objects) {
+        const source = object.scriptSource || scriptSource.value;
+        const ok = compileObjectScript(object, source);
+        if (ok) {
+          compiledCount += 1;
+        } else if (!failedName) {
+          failedName = object.name;
+          failedError = object.scriptError;
+        }
+      }
+
+      if (failedName) {
+        project.lastError = `${failedName}: ${failedError}`;
+        setProjectMessage(`Script error on ${failedName}.`, true);
+        return false;
+      }
+
+      setProjectMessage(`Script compiled for ${compiledCount} cube(s).`, false);
+      return true;
+    }
+
+    function stopPlay() {
+      state.playing = false;
+      playButton.classList.remove("active");
+      projectStatus.textContent = "orbit-loop.js ready";
+      statusText.textContent = "Scene ready";
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
+      render();
+    }
+
+    function startPlay() {
+      if (!compileAllScripts()) {
+        return;
+      }
+
+      state.playing = true;
+      playButton.classList.add("active");
+      projectStatus.textContent = "orbit-loop.js running";
+      statusText.textContent = "Script running";
+      if (animationFrameId === null) {
+        previousFrameTime = 0;
+        animationFrameId = requestAnimationFrame(tick);
+      }
+    }
+
+    function applyProjectScript(deltaSeconds) {
+      if (!state.objects.length) {
+        return;
+      }
+
+      for (const object of state.objects) {
+        if (!object.scriptFn && !compileObjectScript(object, object.scriptSource || scriptSource.value)) {
+          project.lastError = `${object.name}: ${object.scriptError}`;
+          setProjectMessage(`Runtime error while compiling ${object.name}.`, true);
+          stopPlay();
+          return;
+        }
+
+        try {
+          const context = {
+            time: state.elapsed,
+            delta: deltaSeconds,
+            mode: state.mode,
+            radius: 2.5,
+            offset: object.spawnIndex * 0.35,
+            speed: 1.25,
+            height: 0.5,
+            phase: object.spawnIndex * 0.55,
+          };
+          object.scriptFn(object, context, THREE);
+          syncObject(object);
+        } catch (error) {
+          object.scriptError = String(error);
+          project.lastError = `${object.name}: ${error.message}`;
+          setProjectMessage(`Runtime error on ${object.name}: ${error.message}`, true);
+          stopPlay();
+          return;
+        }
+      }
+    }
+
+    let animationFrameId = null;
+    let previousFrameTime = 0;
+
+    function tick(timestamp) {
+      if (!state.playing) {
+        animationFrameId = null;
+        return;
+      }
+
+      const deltaSeconds = previousFrameTime === 0 ? 0.0166 : Math.min(0.05, (timestamp - previousFrameTime) / 1000);
+      previousFrameTime = timestamp;
+      state.elapsed += deltaSeconds;
+      state.delta = deltaSeconds * 1000;
+      state.fps = deltaSeconds > 0 ? Math.round(1 / deltaSeconds) : 60;
+
+      applyProjectScript(deltaSeconds);
+      render();
+      animationFrameId = requestAnimationFrame(tick);
+    }
+
+    function createCube(name, source = scriptSource.value) {
+      const index = state.nextId++;
+      const geometry = new THREE.BoxGeometry(1, 1, 1);
+      const material = new THREE.MeshStandardMaterial({
+        color: new THREE.Color().setHSL((index * 0.16) % 1, 0.72, 0.58),
+        roughness: 0.35,
+        metalness: 0.08,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      THREE_STATE.scene.add(mesh);
+      return {
+        id: `cube-${index}`,
+        name: name ?? `Cube ${index}`,
+        spawnIndex: index - 1,
+        position: { x: (index - 1) * 1.2, y: 0.5, z: (index - 1) * -1.2 },
+        rotation: { x: 0, y: 45, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        scriptSource: source,
+        scriptFn: null,
+        scriptError: "",
+        scriptVersion: 0,
+        mesh,
+      };
+    }
+
+    function getSelectedObject() {
+      return state.objects.find((object) => object.id === state.selectedId) ?? null;
+    }
+
+    function ensureSelection() {
+      if (state.selectedId && getSelectedObject()) {
+        return;
+      }
+      state.selectedId = state.objects[0]?.id ?? null;
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      const is2d = mode === "2d";
+      mode2dButton.classList.toggle("active", is2d);
+      mode3dButton.classList.toggle("active", !is2d);
+      modeToggle.classList.toggle("active", is2d);
+      viewModeBadge.innerHTML = `View: <strong>${is2d ? "2D" : "3D"}</strong>`;
+      modeStatus.textContent = is2d ? "2D mode" : "3D mode";
+      scriptMode.textContent = is2d
+        ? "applies to all Cubes on a 2D plane"
+        : "applies to all Cubes around origin";
+      THREE_STATE.grid2d.visible = is2d;
+      THREE_STATE.grid3d.visible = !is2d;
+      THREE_STATE.axis.visible = !is2d;
+      updateCamera();
+      render();
+    }
+
+    function addCube() {
+      const template = getSelectedOrFirstObject();
+      const cube = createCube(undefined, template?.scriptSource ?? scriptSource.value);
+      compileObjectScript(cube, cube.scriptSource);
+      state.objects.push(cube);
+      state.selectedId = cube.id;
+      statusText.textContent = `${cube.name} added`;
+      render();
+    }
+
+    function setSelection(id) {
+      state.selectedId = id;
+      render();
+    }
+
+    function updateInspectorField(inputId, rawValue) {
+      const object = getSelectedObject();
+      if (!object) return;
+
+      const value = Number(rawValue);
+      if (Number.isNaN(value)) return;
+
+      if (inputId.startsWith("position")) {
+        const axis = inputId.slice(-1).toLowerCase();
+        object.position[axis] = value;
+        if (state.mode === "2d" && axis === "z") {
+          object.position.z = 0;
+          inputs.positionZ.value = "0.0";
+        }
+      } else if (inputId.startsWith("rotation")) {
+        const axis = inputId.slice(-1).toLowerCase();
+        object.rotation[axis] = value;
+      } else if (inputId.startsWith("scale")) {
+        const axis = inputId.slice(-1).toLowerCase();
+        object.scale[axis] = Math.max(0.1, value);
+      }
+      syncObject(object);
+      render();
+    }
+
+    function syncObject(object) {
+      object.mesh.position.set(object.position.x, object.position.y, object.position.z);
+      object.mesh.rotation.set(
+        THREE.MathUtils.degToRad(object.rotation.x),
+        THREE.MathUtils.degToRad(object.rotation.y),
+        THREE.MathUtils.degToRad(object.rotation.z),
+      );
+      object.mesh.scale.set(object.scale.x, object.scale.y, object.scale.z);
+      object.mesh.material.wireframe = false;
+      const selected = object.id === state.selectedId;
+      object.mesh.material.emissive = new THREE.Color(selected ? 0x1f5a45 : 0x000000);
+      object.mesh.material.emissiveIntensity = selected ? 0.35 : 0.0;
+    }
+
+    function renderHierarchy() {
+      hierarchyList.innerHTML = "";
+      const tree = document.createElement("div");
+      tree.className = "tree";
+      state.objects.forEach((object) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = `tree-item${object.id === state.selectedId ? " active" : ""}`;
+        item.innerHTML = `<span>${object.name}</span><small>cube</small>`;
+        item.addEventListener("click", () => setSelection(object.id));
+        tree.appendChild(item);
+      });
+      hierarchyList.appendChild(tree);
+    }
+
+    function syncInspector() {
+      const object = getSelectedObject();
+      if (!object) {
+        inspectorObjectName.textContent = "None";
+        selectionBadge.textContent = "Selection: none";
+        scriptMode.textContent = "no cube selected";
+        return;
+      }
+
+      inspectorObjectName.textContent = object.name;
+      selectionBadge.textContent = `Selection: ${object.name}`;
+      scriptMode.textContent = `script for ${object.name}`;
+      inputs.positionX.value = object.position.x.toFixed(1);
+      inputs.positionY.value = object.position.y.toFixed(1);
+      inputs.positionZ.value = object.position.z.toFixed(1);
+      inputs.rotationX.value = object.rotation.x.toFixed(1);
+      inputs.rotationY.value = object.rotation.y.toFixed(1);
+      inputs.rotationZ.value = object.rotation.z.toFixed(1);
+      inputs.scaleX.value = object.scale.x.toFixed(1);
+      inputs.scaleY.value = object.scale.y.toFixed(1);
+      inputs.scaleZ.value = object.scale.z.toFixed(1);
+      if (scriptSource.value !== object.scriptSource) {
+        scriptSource.value = object.scriptSource;
+      }
+      if (object.scriptError) {
+        scriptLog.textContent = `Last error: ${object.scriptError}`;
+        scriptLog.style.color = "#ff9a9a";
+      } else {
+        scriptLog.textContent = `Script ready for ${object.name}.`;
+        scriptLog.style.color = "var(--muted)";
+      }
+    }
+
+    function updateCamera() {
+      const rect = sceneShell.getBoundingClientRect();
+      const width = Math.max(1, rect.width);
+      const height = Math.max(1, rect.height);
+      const aspect = width / height;
+
+      if (state.mode === "2d") {
+        const frustum = 8;
+        THREE_STATE.camera2d.left = (-frustum * aspect) / 2;
+        THREE_STATE.camera2d.right = (frustum * aspect) / 2;
+        THREE_STATE.camera2d.top = frustum / 2;
+        THREE_STATE.camera2d.bottom = -frustum / 2;
+        THREE_STATE.camera2d.near = 0.1;
+        THREE_STATE.camera2d.far = 100;
+        THREE_STATE.camera2d.position.set(0, 0, 10);
+        THREE_STATE.camera2d.lookAt(0, 0, 0);
+        THREE_STATE.camera2d.updateProjectionMatrix();
+      } else {
+        THREE_STATE.camera3d.aspect = aspect;
+        THREE_STATE.camera3d.position.set(6, 5, 6);
+        THREE_STATE.camera3d.lookAt(0, 0.5, 0);
+        THREE_STATE.camera3d.updateProjectionMatrix();
+      }
+
+      THREE_STATE.renderer.setSize(width, height, false);
+    }
+
+    function renderSceneObjects() {
+      state.objects.forEach((object) => {
+        syncObject(object);
+      });
+    }
+
+    function render() {
+      ensureSelection();
+      renderHierarchy();
+      renderSceneObjects();
+      syncInspector();
+      updateStats();
+      renderThree();
+    }
+
+    function updateStats() {
+      fpsValue.textContent = `fps ${state.fps}`;
+      fpsOverlay.textContent = String(state.fps);
+      deltaValue.textContent = `${state.delta.toFixed(1)} ms`;
+    }
+
+    function renderThree() {
+      const camera = state.mode === "2d" ? THREE_STATE.camera2d : THREE_STATE.camera3d;
+      THREE_STATE.renderer.render(THREE_STATE.scene, camera);
+    }
+
+    function getPointerNDC(event) {
+      const rect = viewport.getBoundingClientRect();
+      return {
+        x: ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        y: -(((event.clientY - rect.top) / rect.height) * 2 - 1),
+      };
+    }
+
+    function pickObject(event) {
+      const ndc = getPointerNDC(event);
+      const camera = state.mode === "2d" ? THREE_STATE.camera2d : THREE_STATE.camera3d;
+      THREE_STATE.raycaster.setFromCamera(ndc, camera);
+      const hits = THREE_STATE.raycaster.intersectObjects(state.objects.map((object) => object.mesh), false);
+      return hits[0]?.object ?? null;
+    }
+
+    function startDrag(event, object) {
+      const ndc = getPointerNDC(event);
+      const camera = state.mode === "2d" ? THREE_STATE.camera2d : THREE_STATE.camera3d;
+      THREE_STATE.raycaster.setFromCamera(ndc, camera);
+
+      THREE_STATE.dragPlane.setFromNormalAndCoplanarPoint(
+        state.mode === "2d" ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0),
+        object.mesh.position,
+      );
+
+      const hitPoint = new THREE.Vector3();
+      THREE_STATE.raycaster.ray.intersectPlane(THREE_STATE.dragPlane, hitPoint);
+      THREE_STATE.dragOffset.copy(hitPoint).sub(object.mesh.position);
+      state.dragging = { objectId: object.id, pointerId: event.pointerId };
+      viewport.setPointerCapture(event.pointerId);
+    }
+
+    function updateDrag(event) {
+      if (!state.dragging || state.dragging.pointerId !== event.pointerId) return;
+      const object = state.objects.find((entry) => entry.id === state.dragging.objectId);
+      if (!object) return;
+
+      const ndc = getPointerNDC(event);
+      const camera = state.mode === "2d" ? THREE_STATE.camera2d : THREE_STATE.camera3d;
+      THREE_STATE.raycaster.setFromCamera(ndc, camera);
+
+      const hitPoint = new THREE.Vector3();
+      if (!THREE_STATE.raycaster.ray.intersectPlane(THREE_STATE.dragPlane, hitPoint)) return;
+
+      const next = hitPoint.sub(THREE_STATE.dragOffset);
+      if (state.mode === "2d") {
+        object.position.x = clamp(next.x, -4, 4);
+        object.position.y = clamp(next.y, -3, 3);
+        object.position.z = 0;
+      } else {
+        object.position.x = clamp(next.x, -4, 4);
+        object.position.z = clamp(next.z, -4, 4);
+      }
+
+      syncObject(object);
+      render();
+    }
+
+    function endDrag(event) {
+      if (!state.dragging || state.dragging.pointerId !== event.pointerId) return;
+      state.dragging = null;
+      if (viewport.hasPointerCapture(event.pointerId)) {
+        viewport.releasePointerCapture(event.pointerId);
+      }
+    }
+
+    addCubeButton.addEventListener("click", addCube);
+    modeToggle.addEventListener("click", () => setMode(state.mode === "2d" ? "3d" : "2d"));
+    mode2dButton.addEventListener("click", () => setMode("2d"));
+    mode3dButton.addEventListener("click", () => setMode("3d"));
+    runScriptButton.addEventListener("click", () => {
+      compileScript();
+    });
+    playButton.addEventListener("click", startPlay);
+    stopButton.addEventListener("click", stopPlay);
+
+    scriptSource.addEventListener("input", () => {
+      saveScriptDraft(scriptSource.value);
+      const object = getSelectedOrFirstObject();
+      if (object) {
+        object.scriptSource = scriptSource.value;
+        compileObjectScript(object, object.scriptSource);
+        scriptLog.textContent = "Draft saved for selected cube. Click Run to compile.";
+        scriptLog.style.color = "var(--muted)";
+        projectStatus.textContent = `${object.name} script draft updated`;
+      } else {
+        scriptLog.textContent = "Draft saved.";
+        scriptLog.style.color = "var(--muted)";
+        projectStatus.textContent = "orbit-loop.js draft updated";
+      }
+    });
+
+    Object.entries(inputs).forEach(([id, input]) => {
+      input.addEventListener("input", () => updateInspectorField(id, input.value));
+    });
+
+    viewport.addEventListener("pointerdown", (event) => {
+      const hit = pickObject(event);
+      if (hit) {
+        const object = state.objects.find((entry) => entry.mesh === hit);
+        if (object) {
+          setSelection(object.id);
+          startDrag(event, object);
+        }
+      } else {
+        ensureSelection();
+        render();
+      }
+    });
+    viewport.addEventListener("pointermove", updateDrag);
+    viewport.addEventListener("pointerup", endDrag);
+    viewport.addEventListener("pointercancel", endDrag);
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateCamera();
+      renderThree();
+    });
+    resizeObserver.observe(sceneShell);
+
+    state.objects.push(createCube("Cube"));
+    state.selectedId = state.objects[0].id;
+    compileScript();
+    updateCamera();
+    render();
+  </script>
+</body>
+</html>

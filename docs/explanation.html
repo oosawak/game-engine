@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Game Engine Explanation</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1016;
+      --panel: #121824;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e7edf8;
+      --muted: #8f9bb0;
+      --accent: #6cc1ff;
+      --accent-2: #7cf0b7;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --font: "Avenir Next", "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(108, 193, 255, 0.12), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(124, 240, 183, 0.09), transparent 30%),
+        linear-gradient(180deg, #0b0e14 0%, #101421 100%);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body { padding: 24px; }
+    .wrap {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }
+
+    .hero, .section {
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)), var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 28px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(108, 193, 255, 0.12);
+      border: 1px solid rgba(108, 193, 255, 0.24);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+
+    h1, h2 { margin: 0; }
+    h1 { font-size: 30px; }
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.75;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+      gap: 18px;
+    }
+
+    .video-card, .notes {
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.03);
+      min-height: 0;
+    }
+
+    video {
+      width: 100%;
+      border-radius: 14px;
+      display: block;
+      background: #000;
+    }
+
+    .notes {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .note {
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .note strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+
+    .note span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .links {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .link {
+      text-decoration: none;
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 13px;
+    }
+
+    @media (max-width: 960px) {
+      body { padding: 12px; }
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="badge"><span class="dot"></span> Explanation Page</div>
+      <h1>Game Engine / Editor Flow</h1>
+      <p>
+        このページは、`Hierarchy`・`Scene`・`Inspector`・`Project` をどう使うかを短く伝えるための説明ページです。
+        下の動画は、Cube の追加、選択、移動、スクリプト実行の流れを示しています。
+      </p>
+      <div class="links">
+        <a class="link" href="./index.html">Home</a>
+        <a class="link" href="./editor-three.html">Open Editor</a>
+      </div>
+    </section>
+
+    <section class="layout">
+      <article class="video-card">
+        <video controls playsinline preload="metadata">
+          <source src="./test002.mp4" type="video/mp4" />
+          お使いのブラウザは video タグに対応していません。
+        </video>
+      </article>
+
+      <aside class="notes">
+        <div class="note">
+          <strong>1. Hierarchy</strong>
+          <span>Cube を追加して選択します。選択状態は Scene と Inspector に同期します。</span>
+        </div>
+        <div class="note">
+          <strong>2. Scene View</strong>
+          <span>2D / 3D を切り替えられます。Cube はドラッグで移動できます。</span>
+        </div>
+        <div class="note">
+          <strong>3. Inspector</strong>
+          <span>Position / Rotation / Scale とスクリプトを編集できます。編集内容は選択中の Cube に反映されます。</span>
+        </div>
+        <div class="note">
+          <strong>4. Play / Script</strong>
+          <span>Play を押すと、各 Cube のスクリプトが実行され、原点周りのループ挙動になります。</span>
+        </div>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>
