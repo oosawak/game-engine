@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Game Engine Sample</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1016;
+      --panel: #121824;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e7edf8;
+      --muted: #8f9bb0;
+      --accent: #6cc1ff;
+      --accent-2: #7cf0b7;
+      --accent-3: #ffca6c;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --font: "Avenir Next", "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(108, 193, 255, 0.12), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(124, 240, 183, 0.09), transparent 30%),
+        linear-gradient(180deg, #0b0e14 0%, #101421 100%);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body { padding: 24px; }
+
+    .wrap {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }
+
+    .hero, .section {
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)), var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 28px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(108, 193, 255, 0.12);
+      border: 1px solid rgba(108, 193, 255, 0.24);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+
+    h1, h2, h3 { margin: 0; }
+    h1 { font-size: 30px; }
+    h2 { font-size: 20px; }
+    h3 { font-size: 15px; }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.75;
+    }
+
+    .links {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .link {
+      text-decoration: none;
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 13px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+      gap: 18px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .section {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .card p {
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .code {
+      margin: 0;
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: #0a0e15;
+      color: #dbe6ff;
+      font-size: 13px;
+      line-height: 1.7;
+      overflow: auto;
+      white-space: pre;
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .list-item {
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .list-item strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+
+    .list-item span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .accent {
+      color: var(--accent-3);
+    }
+
+    .right-note {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .pill-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    @media (max-width: 960px) {
+      body { padding: 12px; }
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="badge"><span class="dot"></span> Sample Page</div>
+      <h1>Game Engine API Sample</h1>
+      <p>
+        ここは実装の入口として使うサンプルページです。
+        <span class="accent">Cube の追加</span>、<span class="accent">Camera の追尾</span>、<span class="accent">PNG / VRM の読み込み</span>、
+        <span class="accent">スクリプトからの制御</span>を、すぐ確認できる形でまとめています。
+      </p>
+      <div class="links">
+        <a class="link" href="./index.html">Home</a>
+        <a class="link" href="./editor-three.html">Open Editor</a>
+        <a class="link" href="./explanation.html">Explanation</a>
+      </div>
+    </section>
+
+    <section class="layout">
+      <div class="stack">
+        <article class="section">
+          <h2>Quick Start</h2>
+          <div class="grid">
+            <div class="card">
+              <h3>1. Cube を作る</h3>
+              <p>最小のオブジェクトを追加して、Scene 上で選択・移動できる状態にします。</p>
+              <pre class="code">const cube = app.spawn("Cube", {
+  position: { x: 0, y: 1, z: 0 },
+  size: { x: 1, y: 1, z: 1 },
+});</pre>
+            </div>
+            <div class="card">
+              <h3>2. Camera を追尾する</h3>
+              <p>選択中のオブジェクトを Camera が見るようにして、編集しやすくします。</p>
+              <pre class="code">app.setCameraTarget(cube);
+app.setCameraTarget(cube, "SceneCamera");</pre>
+            </div>
+            <div class="card">
+              <h3>3. PNG を動かす</h3>
+              <p>画像アニメーションをスクリプトから再生し、表示の確認を行います。</p>
+              <pre class="code">const sheet = await app.loadImageAnimation(
+  ["walk_01.png", "walk_02.png"],
+  { loop: true }
+);
+app.playImageAnimation(sheet, cube.id);</pre>
+            </div>
+            <div class="card">
+              <h3>4. VRM モーション</h3>
+              <p>VRM とモーションを読み込み、再生・停止・シークを操作できます。</p>
+              <pre class="code">const vrm = await app.loadVrm("assets/character.vrm");
+app.playVrmMotion(vrm, "idle");
+app.seekVrmMotion(vrm, 0.5);</pre>
+            </div>
+          </div>
+        </article>
+
+        <article class="section">
+          <h2>Script Example</h2>
+          <p>
+            Editor の Play 時に流す想定の例です。オブジェクト生成、カメラ追尾、アニメーション再生をまとめて書けます。
+          </p>
+          <pre class="code">const cube = app.spawn("Cube", {
+  position: { x: 0, y: 0, z: 0 },
+  size: { x: 1, y: 1, z: 1 },
+});
+
+const helper = app.spawn("Empty", {
+  position: { x: 2, y: 0, z: 0 },
+});
+
+app.setCameraTarget(cube);
+
+const motion = await app.loadVrm("assets/character.vrm");
+app.playVrmMotion(motion, "idle");
+
+input.on("Space", () => {
+  helper.transform.rotate(0, 90, 0);
+});</pre>
+        </article>
+      </div>
+
+      <aside class="right-note">
+        <section class="section">
+          <h2>What This Covers</h2>
+          <div class="pill-row">
+            <span class="pill">Hierarchy</span>
+            <span class="pill">Scene View</span>
+            <span class="pill">Inspector</span>
+            <span class="pill">Game View</span>
+            <span class="pill">Script</span>
+            <span class="pill">VRM</span>
+            <span class="pill">PNG</span>
+          </div>
+          <div class="list">
+            <div class="list-item">
+              <strong>Object creation</strong>
+              <span>Cube だけでなく Empty や Asset 系も追加し、最初から用途別に分けられます。</span>
+            </div>
+            <div class="list-item">
+              <strong>State sync</strong>
+              <span>Inspector の変更が Scene に反映され、Play 時の挙動も追跡できます。</span>
+            </div>
+            <div class="list-item">
+              <strong>Control from script</strong>
+              <span>スクリプトで再生や切り替えを操作できるので、後でアプリ出力に繋げやすいです。</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Minimal Flow</h2>
+          <pre class="code">1. add Cube
+2. select object
+3. edit Inspector
+4. press Play
+5. run script
+6. export app</pre>
+        </section>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>
