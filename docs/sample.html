@@ -224,6 +224,41 @@
     <section class="layout">
       <div class="stack">
         <article class="section">
+          <h2>API Reference</h2>
+          <div class="grid">
+            <div class="card">
+              <h3>app.spawn(type, options)</h3>
+              <p>オブジェクトを作成します。Cube / Empty / PNG / VRM などを追加する起点です。</p>
+              <pre class="code">const obj = app.spawn("Cube", {
+  position: { x: 0, y: 0, z: 0 },
+  size: { x: 1, y: 1, z: 1 },
+});</pre>
+            </div>
+            <div class="card">
+              <h3>app.setCameraTarget(object, camera?)</h3>
+              <p>カメラの追尾先を切り替えます。Scene View の補助操作にも使えます。</p>
+              <pre class="code">app.setCameraTarget(player);
+app.setCameraTarget(player, "SceneCamera");</pre>
+            </div>
+            <div class="card">
+              <h3>app.loadImageAnimation(frames, options)</h3>
+              <p>PNG のフレーム列を読み込んで、再生可能なアニメーションに変換します。</p>
+              <pre class="code">const clip = await app.loadImageAnimation(
+  ["idle_01.png", "idle_02.png"],
+  { loop: true, fps: 8 }
+);</pre>
+            </div>
+            <div class="card">
+              <h3>app.loadVrm(source, options)</h3>
+              <p>VRM を読み込み、モーションやポーズの再生対象として使います。</p>
+              <pre class="code">const avatar = await app.loadVrm("assets/character.vrm", {
+  pose: "idle",
+});</pre>
+            </div>
+          </div>
+        </article>
+
+        <article class="section">
           <h2>Quick Start</h2>
           <div class="grid">
             <div class="card">
@@ -370,6 +405,31 @@ app.select(target.id);</pre>
 4. press Play
 5. run script
 6. export app</pre>
+        </section>
+
+        <section class="section">
+          <h2>Common Patterns</h2>
+          <div class="grid">
+            <div class="card">
+              <h3>Selection</h3>
+              <p>選択中のオブジェクトを Inspector に反映して編集します。</p>
+              <pre class="code">app.select(cube.id);
+app.focus(cube.id);</pre>
+            </div>
+            <div class="card">
+              <h3>Playback</h3>
+              <p>Play 中だけ動かしたい処理は、スクリプトで明示的に分けます。</p>
+              <pre class="code">app.playImageAnimation(sheet, cube.id);
+app.playVrmMotion(avatar, "walk");</pre>
+            </div>
+            <div class="card">
+              <h3>Controller</h3>
+              <p>入力を使って、操作対象や状態を切り替えられます。</p>
+              <pre class="code">input.on("Space", () => {
+  app.command("jump");
+});</pre>
+            </div>
+          </div>
         </section>
 
         <section class="section">
