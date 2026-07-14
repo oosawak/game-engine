@@ -28,7 +28,9 @@
 
     html, body {
       margin: 0;
-      min-height: 100%;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
       background:
         radial-gradient(circle at top left, rgba(108, 193, 255, 0.12), transparent 28%),
         radial-gradient(circle at bottom right, rgba(124, 240, 183, 0.09), transparent 30%),
@@ -40,7 +42,8 @@
     body { padding: 18px; }
 
     .mock {
-      min-height: calc(100vh - 36px);
+      width: 100%;
+      height: calc(100vh - 36px);
       border: 1px solid var(--border);
       border-radius: 22px;
       overflow: hidden;
@@ -150,6 +153,7 @@
       gap: var(--gutter);
       padding: var(--gutter);
       min-height: 0;
+      overflow: hidden;
     }
 
     .panel {
@@ -191,6 +195,10 @@
     .panel-body {
       min-height: 0;
       padding: 12px;
+      overflow: hidden;
+    }
+
+    .panel[aria-label="Inspector"] .panel-body {
       overflow: auto;
     }
 
@@ -241,6 +249,7 @@
     .scene {
       display: grid;
       grid-template-rows: auto 1fr;
+      min-height: 0;
       background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 12%),
         radial-gradient(circle at center, rgba(255, 255, 255, 0.08), transparent 58%),
@@ -386,9 +395,8 @@
 
     .axis-row {
       display: grid;
-      grid-template-columns: 76px minmax(0, 1fr);
-      align-items: center;
-      gap: 8px;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
     }
 
     .axis-label {
@@ -396,12 +404,12 @@
       font-weight: 700;
       letter-spacing: 0.08em;
       color: var(--accent-2);
-      text-align: center;
+      text-align: left;
     }
 
     .axis-controls {
       display: grid;
-      gap: 6px;
+      gap: 4px;
     }
 
     .axis-xyz {
@@ -921,6 +929,24 @@
                 <button class="mini-button" id="pngClearButton" type="button">Clear image</button>
               </div>
             </details>
+            <details class="property" id="vrmProperty" open>
+              <summary class="property-header">
+                <span class="property-summary-meta"><span>VRM</span><span class="property-caret">▾</span></span>
+                <span id="vrmMode">model asset</span>
+              </summary>
+              <div class="asset-stack">
+                <div class="asset-preview" id="vrmPreview">No VRM selected.</div>
+                <label class="asset-row">
+                  <span>File</span>
+                  <input id="vrmFileInput" type="file" accept=".vrm,.glb,.gltf,model/gltf-binary,model/gltf+json" />
+                </label>
+                <label class="asset-row">
+                  <span>URL</span>
+                  <input id="vrmUrlInput" class="input" type="url" placeholder="https://..." />
+                </label>
+                <button class="mini-button" id="vrmClearButton" type="button">Clear model</button>
+              </div>
+            </details>
             <details class="property" id="advmngProperty" open>
               <summary class="property-header">
                 <span class="property-summary-meta"><span>ADVMNG</span><span class="property-caret">▾</span></span>
@@ -1134,8 +1160,17 @@
     </div>
   </div>
 
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.167.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.1/examples/jsm/"
+      }
+    }
+  </script>
   <script type="module">
-    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.167.1/build/three.module.js";
+    import * as THREE from "three";
+    import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
     const viewport = document.getElementById("viewport");
     const sceneShell = document.getElementById("sceneShell");
@@ -1162,6 +1197,12 @@
     const pngFileInput = document.getElementById("pngFileInput");
     const pngUrlInput = document.getElementById("pngUrlInput");
     const pngClearButton = document.getElementById("pngClearButton");
+    const vrmProperty = document.getElementById("vrmProperty");
+    const vrmMode = document.getElementById("vrmMode");
+    const vrmPreview = document.getElementById("vrmPreview");
+    const vrmFileInput = document.getElementById("vrmFileInput");
+    const vrmUrlInput = document.getElementById("vrmUrlInput");
+    const vrmClearButton = document.getElementById("vrmClearButton");
     const advmngProperty = document.getElementById("advmngProperty");
     const advmngMode = document.getElementById("advmngMode");
     const advmngPreview = document.getElementById("advmngPreview");
@@ -1244,6 +1285,8 @@ object.rotation.y = angle * 57.2957795;`;
       selectedId: null,
       selectedAdvmngSlot: 0,
       advmngEditorOpen: false,
+      sceneZoom2d: 1,
+      sceneZoom3d: 1,
       objects: [],
       dragging: null,
       fps: 60,
@@ -1291,6 +1334,7 @@ object.rotation.y = angle * 57.2957795;`;
     THREE_STATE.axis.visible = true;
 
     THREE_STATE.directional.position.set(6, 8, 5);
+    const gltfLoader = new GLTFLoader();
 
     function clamp(value, min, max) {
       return Math.min(max, Math.max(min, value));
@@ -1568,13 +1612,21 @@ object.rotation.y = angle * 57.2957795;`;
         });
       }
 
+      const id = `${type.toLowerCase()}-${index}`;
+      const vrmRoot = type === "VRM" ? new THREE.Group() : null;
       const mesh = new THREE.Mesh(geometry, material);
       mesh.castShadow = false;
       mesh.receiveShadow = false;
+      mesh.userData.ownerId = id;
       THREE_STATE.scene.add(mesh);
+      if (vrmRoot) {
+        vrmRoot.userData.ownerId = id;
+        vrmRoot.visible = false;
+        THREE_STATE.scene.add(vrmRoot);
+      }
 
       return {
-        id: `${type.toLowerCase()}-${index}`,
+        id,
         type,
         typeLabel,
         name: name ?? `${type} ${index}`,
@@ -1598,6 +1650,13 @@ object.rotation.y = angle * 57.2957795;`;
         textureLabel: type === "PNG" || type === "ADVMNG" ? "Placeholder texture" : "",
         textureUrl: "",
         texturePreviewUrl: "",
+        vrmRoot,
+        vrmSourceUrl: "",
+        vrmObjectUrl: "",
+        vrmPreviewUrl: "",
+        vrmStatus: type === "VRM" ? "No model selected." : "",
+        vrmLoading: false,
+        vrmLoadToken: 0,
         advmngSlots: type === "ADVMNG" ? [
           { source: null, label: "Slot 1", position: { x: -256, y: -256 }, scale: { x: 1, y: 1 }, zIndex: 0, visible: true },
           { source: null, label: "Slot 2", position: { x: 0, y: -256 }, scale: { x: 1, y: 1 }, zIndex: 1, visible: true },
@@ -1686,6 +1745,198 @@ object.rotation.y = angle * 57.2957795;`;
         image.onerror = reject;
         image.src = source;
       });
+    }
+
+    function disposeMaterial(material) {
+      if (!material) {
+        return;
+      }
+
+      if (Array.isArray(material)) {
+        for (const entry of material) {
+          disposeMaterial(entry);
+        }
+        return;
+      }
+
+      material.map?.dispose?.();
+      material.lightMap?.dispose?.();
+      material.aoMap?.dispose?.();
+      material.emissiveMap?.dispose?.();
+      material.bumpMap?.dispose?.();
+      material.normalMap?.dispose?.();
+      material.displacementMap?.dispose?.();
+      material.roughnessMap?.dispose?.();
+      material.metalnessMap?.dispose?.();
+      material.alphaMap?.dispose?.();
+      material.envMap?.dispose?.();
+      material.dispose?.();
+    }
+
+    function disposeObject3D(object3D) {
+      if (!object3D) {
+        return;
+      }
+
+      object3D.traverse?.((child) => {
+        child.geometry?.dispose?.();
+        disposeMaterial(child.material);
+      });
+    }
+
+    function getTransformRoot(object) {
+      if (object?.type === "VRM" && object.vrmRoot && object.vrmRoot.children.length > 0) {
+        return object.vrmRoot;
+      }
+
+      return object?.mesh ?? null;
+    }
+
+    function getPickRoots(object) {
+      const roots = [];
+      if (object?.mesh) {
+        roots.push(object.mesh);
+      }
+      if (object?.type === "VRM" && object.vrmRoot) {
+        roots.push(object.vrmRoot);
+      }
+      return roots;
+    }
+
+    function findObjectFromHit(hit) {
+      let current = hit;
+      while (current) {
+        const ownerId = current.userData?.ownerId;
+        if (ownerId) {
+          return state.objects.find((entry) => entry.id === ownerId) ?? null;
+        }
+        current = current.parent ?? null;
+      }
+      for (const object of state.objects) {
+        if (object.mesh === hit || object.vrmRoot === hit) {
+          return object;
+        }
+      }
+      return null;
+    }
+
+    function clearVrmModel(object) {
+      if (!object?.vrmRoot) {
+        return;
+      }
+
+      object.vrmLoadToken += 1;
+
+      while (object.vrmRoot.children.length > 0) {
+        const child = object.vrmRoot.children[0];
+        object.vrmRoot.remove(child);
+        disposeObject3D(child);
+      }
+
+      if (object.vrmObjectUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(object.vrmObjectUrl);
+      }
+
+      object.vrmRoot.visible = false;
+      object.mesh.visible = true;
+      object.vrmSourceUrl = "";
+      object.vrmObjectUrl = "";
+      object.vrmPreviewUrl = "";
+      object.vrmStatus = "No model selected.";
+      object.vrmLoading = false;
+    }
+
+    function loadVrmModel(object, source, label) {
+      if (!object?.vrmRoot) {
+        return;
+      }
+
+      const token = object.vrmLoadToken + 1;
+      object.vrmLoadToken = token;
+      object.vrmLoading = true;
+      object.vrmStatus = "Loading VRM...";
+      object.vrmSourceUrl = label;
+      object.vrmObjectUrl = source;
+      object.vrmPreviewUrl = label;
+      vrmMode.textContent = "Loading...";
+      vrmPreview.textContent = `Loading ${label || "model"}...`;
+      render();
+
+      gltfLoader.load(
+        source,
+        (gltf) => {
+          if (object.vrmLoadToken !== token) {
+            disposeObject3D(gltf.scene);
+            return;
+          }
+
+          while (object.vrmRoot.children.length > 0) {
+            const child = object.vrmRoot.children[0];
+            object.vrmRoot.remove(child);
+            disposeObject3D(child);
+          }
+
+          const model = gltf.scene || gltf.scenes?.[0] || null;
+          if (!model) {
+            object.vrmLoading = false;
+            object.vrmStatus = "Model load failed.";
+            object.vrmPreviewUrl = "";
+            render();
+            return;
+          }
+
+          model.userData.ownerId = object.id;
+          model.traverse((child) => {
+            child.userData.ownerId = object.id;
+            child.frustumCulled = false;
+          });
+
+          const box = new THREE.Box3().setFromObject(model);
+          if (box.isEmpty()) {
+            model.position.set(0, -0.9, 0);
+          } else {
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            model.position.sub(center);
+            const maxDimension = Math.max(size.x, size.y, size.z, 1);
+            const scale = 2.2 / maxDimension;
+            model.scale.setScalar(scale);
+            model.position.y -= size.y * scale * 0.35;
+          }
+
+          object.vrmRoot.add(model);
+          object.vrmRoot.visible = true;
+          object.mesh.visible = false;
+          object.vrmStatus = `Loaded ${label || model.name || "VRM"}`;
+          object.vrmPreviewUrl = label || source;
+          object.vrmLoading = false;
+          vrmMode.textContent = object.vrmStatus;
+          vrmPreview.textContent = object.vrmStatus;
+          if (source.startsWith("blob:")) {
+            URL.revokeObjectURL(source);
+          }
+          syncObject(object);
+          render();
+        },
+        undefined,
+        () => {
+          if (object.vrmLoadToken !== token) {
+            return;
+          }
+
+          object.vrmLoading = false;
+          object.vrmStatus = "VRM load failed.";
+          object.vrmPreviewUrl = "";
+          object.vrmRoot.visible = false;
+          object.mesh.visible = true;
+          vrmMode.textContent = object.vrmStatus;
+          vrmPreview.textContent = "Failed to load VRM.";
+          if (source.startsWith("blob:")) {
+            URL.revokeObjectURL(source);
+          }
+          render();
+        },
+      );
     }
 
     async function drawAdvmngSlots(ctx, canvas, object, selectedSlotIndex = null) {
@@ -1844,6 +2095,20 @@ object.rotation.y = angle * 57.2957795;`;
       THREE_STATE.axis.visible = !is2d;
       updateCamera();
       render();
+    }
+
+    function handleSceneZoom(event) {
+      event.preventDefault();
+
+      const scale = event.deltaY > 0 ? 0.9 : 1.1;
+      if (state.mode === "2d") {
+        state.sceneZoom2d = clamp(state.sceneZoom2d * scale, 0.25, 4);
+      } else {
+        state.sceneZoom3d = clamp(state.sceneZoom3d * scale, 0.5, 3);
+      }
+
+      updateCamera();
+      renderThree();
     }
 
     function addCube() {
@@ -2120,27 +2385,38 @@ object.rotation.y = angle * 57.2957795;`;
     }
 
     function syncObject(object) {
-      object.mesh.position.set(object.position.x, object.position.y, object.position.z);
-      object.mesh.rotation.set(
+      const transformRoot = getTransformRoot(object);
+      if (!transformRoot) {
+        return;
+      }
+
+      transformRoot.position.set(object.position.x, object.position.y, object.position.z);
+      transformRoot.rotation.set(
         THREE.MathUtils.degToRad(object.rotation.x),
         THREE.MathUtils.degToRad(object.rotation.y),
         THREE.MathUtils.degToRad(object.rotation.z),
       );
-      object.mesh.scale.set(object.scale.x, object.scale.y, object.scale.z);
+      transformRoot.scale.set(object.scale.x, object.scale.y, object.scale.z);
+      if (object.type === "VRM" && object.vrmRoot) {
+        object.mesh.visible = transformRoot === object.mesh;
+        object.vrmRoot.visible = transformRoot === object.vrmRoot;
+      }
       object.mesh.material.wireframe = false;
       if (isImageObject(object)) {
         object.mesh.material.map = object.texture ?? null;
         object.mesh.material.transparent = true;
         if (object.preserveAspectRatio && object.textureAspect > 0) {
           object.scale.y = Math.max(0.1, object.scale.x / object.textureAspect);
-          object.mesh.scale.y = object.scale.y;
+          transformRoot.scale.y = object.scale.y;
         }
         object.mesh.material.needsUpdate = true;
       }
-      object.mesh.renderOrder = Math.round((object.position.z || 0) * 1000);
+      transformRoot.renderOrder = Math.round((object.position.z || 0) * 1000);
       const selected = object.id === state.selectedId;
-      object.mesh.material.emissive = new THREE.Color(selected ? 0x1f5a45 : 0x000000);
-      object.mesh.material.emissiveIntensity = selected ? 0.35 : 0.0;
+      if (object.mesh.material) {
+        object.mesh.material.emissive = new THREE.Color(selected ? 0x1f5a45 : 0x000000);
+        object.mesh.material.emissiveIntensity = selected ? 0.35 : 0.0;
+      }
     }
 
     function renderHierarchy() {
@@ -2204,6 +2480,7 @@ object.rotation.y = angle * 57.2957795;`;
         selectionBadge.textContent = "Selection: none";
         scriptMode.textContent = "no object selected";
         pngProperty.hidden = true;
+        vrmProperty.hidden = true;
         advmngProperty.hidden = true;
         closeAdvmngEditor();
         return;
@@ -2223,8 +2500,10 @@ object.rotation.y = angle * 57.2957795;`;
       inputs.scaleZ.value = object.scale.z.toFixed(1);
       const isImage = isImageObject(object);
       pngProperty.hidden = !isImage || isAdvmngObject(object);
+      vrmProperty.hidden = object.type !== "VRM";
       advmngProperty.hidden = !isAdvmngObject(object);
       pngMode.textContent = isImage && !isAdvmngObject(object) ? (object.textureLabel || "image asset") : "image asset";
+      vrmMode.textContent = object.type === "VRM" ? (object.vrmStatus || "model asset") : "model asset";
       advmngMode.textContent = isAdvmngObject(object) ? (object.textureLabel || "4 PNG composite") : "4 PNG composite";
       if (isImage && !isAdvmngObject(object)) {
         pngLockAspect.checked = Boolean(object.preserveAspectRatio);
@@ -2240,6 +2519,11 @@ object.rotation.y = angle * 57.2957795;`;
         }
         pngUrlInput.value = object.textureUrl || "";
         pngFileInput.value = "";
+      }
+      if (object.type === "VRM") {
+        vrmPreview.textContent = object.vrmStatus || "No VRM selected.";
+        vrmUrlInput.value = object.vrmSourceUrl || "";
+        vrmFileInput.value = "";
       }
       if (isAdvmngObject(object)) {
         const slot = getActiveAdvmngSlot(object);
@@ -2287,15 +2571,17 @@ object.rotation.y = angle * 57.2957795;`;
         THREE_STATE.camera2d.left = (-frustum * aspect) / 2;
         THREE_STATE.camera2d.right = (frustum * aspect) / 2;
         THREE_STATE.camera2d.top = frustum / 2;
-      THREE_STATE.camera2d.bottom = -frustum / 2;
-      THREE_STATE.camera2d.near = 0.1;
-      THREE_STATE.camera2d.far = 100;
-      THREE_STATE.camera2d.position.set(0, 0, 10);
-      THREE_STATE.camera2d.lookAt(0, 0, 0);
+        THREE_STATE.camera2d.bottom = -frustum / 2;
+        THREE_STATE.camera2d.near = 0.1;
+        THREE_STATE.camera2d.far = 100;
+        THREE_STATE.camera2d.zoom = state.sceneZoom2d;
+        THREE_STATE.camera2d.position.set(0, 0, 10);
+        THREE_STATE.camera2d.lookAt(0, 0, 0);
         THREE_STATE.camera2d.updateProjectionMatrix();
       } else {
+        const zoom = Math.max(0.5, state.sceneZoom3d);
         THREE_STATE.camera3d.aspect = aspect;
-        THREE_STATE.camera3d.position.set(6, 5, 6);
+        THREE_STATE.camera3d.position.set(6 / zoom, 5 / zoom, 6 / zoom);
         THREE_STATE.camera3d.lookAt(0, 0.5, 0);
         THREE_STATE.camera3d.updateProjectionMatrix();
       }
@@ -2341,7 +2627,7 @@ object.rotation.y = angle * 57.2957795;`;
       const ndc = getPointerNDC(event);
       const camera = state.mode === "2d" ? THREE_STATE.camera2d : THREE_STATE.camera3d;
       THREE_STATE.raycaster.setFromCamera(ndc, camera);
-      const hits = THREE_STATE.raycaster.intersectObjects(state.objects.map((object) => object.mesh), false);
+      const hits = THREE_STATE.raycaster.intersectObjects(state.objects.flatMap((object) => getPickRoots(object)), true);
       return hits[0]?.object ?? null;
     }
 
@@ -2349,15 +2635,16 @@ object.rotation.y = angle * 57.2957795;`;
       const ndc = getPointerNDC(event);
       const camera = state.mode === "2d" ? THREE_STATE.camera2d : THREE_STATE.camera3d;
       THREE_STATE.raycaster.setFromCamera(ndc, camera);
+      const root = getTransformRoot(object);
 
       THREE_STATE.dragPlane.setFromNormalAndCoplanarPoint(
         state.mode === "2d" ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0),
-        object.mesh.position,
+        root?.position ?? object.mesh.position,
       );
 
       const hitPoint = new THREE.Vector3();
       THREE_STATE.raycaster.ray.intersectPlane(THREE_STATE.dragPlane, hitPoint);
-      THREE_STATE.dragOffset.copy(hitPoint).sub(object.mesh.position);
+      THREE_STATE.dragOffset.copy(hitPoint).sub(root?.position ?? object.mesh.position);
       state.dragging = { kind: "object", objectId: object.id, pointerId: event.pointerId };
       viewport.setPointerCapture(event.pointerId);
     }
@@ -2503,17 +2790,13 @@ object.rotation.y = angle * 57.2957795;`;
 
       state.objects.splice(index, 1);
       THREE_STATE.scene.remove(object.mesh);
-      object.mesh.geometry?.dispose?.();
-      if (Array.isArray(object.mesh.material)) {
-        for (const material of object.mesh.material) {
-          material?.map?.dispose?.();
-          material?.dispose?.();
-        }
-      } else {
-        object.mesh.material?.map?.dispose?.();
-        object.mesh.material?.dispose?.();
-      }
+      object.vrmRoot && THREE_STATE.scene.remove(object.vrmRoot);
+      disposeObject3D(object.mesh);
+      disposeObject3D(object.vrmRoot);
       object.texture?.dispose?.();
+      if (object.vrmObjectUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(object.vrmObjectUrl);
+      }
 
       state.selectedId = state.objects[0]?.id ?? null;
       statusText.textContent = `${object.name} deleted`;
@@ -2588,6 +2871,45 @@ object.rotation.y = angle * 57.2957795;`;
       }
 
       resetPngTexture(object);
+    });
+
+    vrmFileInput.addEventListener("change", () => {
+      const object = getSelectedObject();
+      const file = vrmFileInput.files?.[0];
+      if (!object || object.type !== "VRM" || !file) {
+        return;
+      }
+
+      const blobUrl = URL.createObjectURL(file);
+      loadVrmModel(object, blobUrl, file.name);
+    });
+
+    vrmUrlInput.addEventListener("change", () => {
+      const object = getSelectedObject();
+      if (!object || object.type !== "VRM") {
+        return;
+      }
+
+      const url = vrmUrlInput.value.trim();
+      if (!url) {
+        clearVrmModel(object);
+        syncInspector();
+        render();
+        return;
+      }
+
+      loadVrmModel(object, url, url);
+    });
+
+    vrmClearButton.addEventListener("click", () => {
+      const object = getSelectedObject();
+      if (!object || object.type !== "VRM") {
+        return;
+      }
+
+      clearVrmModel(object);
+      syncInspector();
+      render();
     });
 
     pngLockAspect.addEventListener("change", () => {
@@ -2806,7 +3128,7 @@ object.rotation.y = angle * 57.2957795;`;
     viewport.addEventListener("pointerdown", (event) => {
       const hit = pickObject(event);
       if (hit) {
-        const object = state.objects.find((entry) => entry.mesh === hit);
+        const object = findObjectFromHit(hit);
         if (object) {
           setSelection(object.id);
           startDrag(event, object);
@@ -2819,13 +3141,14 @@ object.rotation.y = angle * 57.2957795;`;
     viewport.addEventListener("pointermove", updateDrag);
     viewport.addEventListener("pointerup", endDrag);
     viewport.addEventListener("pointercancel", endDrag);
+    viewport.addEventListener("wheel", handleSceneZoom, { passive: false });
     viewport.addEventListener("dblclick", (event) => {
       const hit = pickObject(event);
       if (!hit) {
         return;
       }
 
-      const object = state.objects.find((entry) => entry.mesh === hit);
+      const object = findObjectFromHit(hit);
       if (!isAdvmngObject(object)) {
         return;
       }
@@ -2855,6 +3178,7 @@ object.rotation.y = angle * 57.2957795;`;
     state.selectedId = state.objects[0].id;
     compileScript();
     updateCamera();
+    setMode(state.mode);
     render();
   </script>
 </body>
