@@ -273,6 +273,17 @@
       overflow: hidden;
     }
 
+    .scene-shell.is-game-view .overlay-top,
+    .scene-shell.is-game-view .overlay-left,
+    .scene-shell.is-game-view .gizmo {
+      display: none;
+    }
+
+    .scene-shell.is-game-view .selection-hint,
+    .scene-shell.is-game-view .camera-preview-stage {
+      display: none;
+    }
+
     .viewport {
       position: absolute;
       inset: 0;
@@ -381,6 +392,35 @@
       display: flex;
       align-items: center;
       gap: 8px;
+    }
+
+    .selection-hint {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(108, 193, 255, 0.09);
+      border: 1px solid rgba(108, 193, 255, 0.2);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .camera-preview-stage {
+      display: grid;
+      gap: 8px;
+    }
+
+    .camera-preview-viewport {
+      min-height: 168px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    }
+
+    .camera-preview-viewport canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
     }
 
     .property-caret {
@@ -799,12 +839,13 @@
       <section class="panel scene" aria-label="Scene View">
         <div class="scene-toolbar">
           <div class="toolbar-group">
-            <button class="toolbar-button active" type="button">Scene View</button>
-            <button class="toolbar-button" type="button">Game View</button>
+            <button class="toolbar-button active" id="sceneViewButton" type="button">Scene View</button>
+            <button class="toolbar-button" id="gameViewButton" type="button">Game View</button>
           </div>
           <div class="toolbar-group">
             <button class="toolbar-button" type="button" id="modeToggle">Toggle 2D / 3D</button>
             <button class="toolbar-button active" type="button" id="moveToolButton">Move</button>
+            <button class="toolbar-button" type="button" id="rotateToolButton">Rotate</button>
           </div>
         </div>
 
@@ -888,6 +929,49 @@
                     </div>
                   </div>
                 </div>
+              </div>
+            </details>
+            <details class="property" id="cameraProperty" open>
+              <summary class="property-header">
+                <span class="property-summary-meta"><span>Camera</span><span class="property-caret">▾</span></span>
+                <span id="cameraMode">view target</span>
+              </summary>
+              <div class="camera-preview-stage">
+                <div class="selection-hint">Scene View で選択中のカメラ映像を表示します。Rotate ツールで向きを確認できます。</div>
+                <div class="camera-preview-viewport" id="cameraPreviewViewport"></div>
+                <label class="asset-row">
+                  <span>FOV</span>
+                  <input id="cameraFovInput" class="input" type="number" step="0.1" min="1" max="179" aria-label="Camera FOV" />
+                </label>
+                <label class="asset-row">
+                  <span>Near</span>
+                  <input id="cameraNearInput" class="input" type="number" step="0.01" min="0.01" aria-label="Camera Near" />
+                </label>
+                <label class="asset-row">
+                  <span>Far</span>
+                  <input id="cameraFarInput" class="input" type="number" step="1" min="1" aria-label="Camera Far" />
+                </label>
+              </div>
+            </details>
+            <details class="property" id="lightProperty" open>
+              <summary class="property-header">
+                <span class="property-summary-meta"><span>Light</span><span class="property-caret">▾</span></span>
+                <span id="lightMode">scene light</span>
+              </summary>
+              <div class="asset-stack">
+                <div class="selection-hint">Light の位置と強さを Scene View で確認できます。距離と減衰もここで調整できます。</div>
+                <label class="asset-row">
+                  <span>Intensity</span>
+                  <input id="lightIntensityInput" class="input" type="number" step="0.1" min="0" aria-label="Light Intensity" />
+                </label>
+                <label class="asset-row">
+                  <span>Distance</span>
+                  <input id="lightDistanceInput" class="input" type="number" step="0.1" min="0" aria-label="Light Distance" />
+                </label>
+                <label class="asset-row">
+                  <span>Decay</span>
+                  <input id="lightDecayInput" class="input" type="number" step="0.1" min="0" aria-label="Light Decay" />
+                </label>
               </div>
             </details>
             <details class="property" open>
@@ -1177,9 +1261,13 @@
     const hierarchyList = document.getElementById("hierarchyList");
     const addTypeSelect = document.getElementById("addTypeSelect");
     const addObjectButton = document.getElementById("addObjectButton");
+    const sceneViewButton = document.getElementById("sceneViewButton");
+    const gameViewButton = document.getElementById("gameViewButton");
     const modeToggle = document.getElementById("modeToggle");
     const mode2dButton = document.getElementById("mode2dButton");
     const mode3dButton = document.getElementById("mode3dButton");
+    const moveToolButton = document.getElementById("moveToolButton");
+    const rotateToolButton = document.getElementById("rotateToolButton");
     const viewModeBadge = document.getElementById("viewModeBadge");
     const modeStatus = document.getElementById("modeStatus");
     const selectionBadge = document.getElementById("selectionBadge");
@@ -1248,6 +1336,17 @@
     const scriptSource = document.getElementById("scriptSource");
     const scriptLog = document.getElementById("scriptLog");
     const scriptMode = document.getElementById("scriptMode");
+    const cameraProperty = document.getElementById("cameraProperty");
+    const cameraMode = document.getElementById("cameraMode");
+    const cameraPreviewViewport = document.getElementById("cameraPreviewViewport");
+    const cameraFovInput = document.getElementById("cameraFovInput");
+    const cameraNearInput = document.getElementById("cameraNearInput");
+    const cameraFarInput = document.getElementById("cameraFarInput");
+    const lightProperty = document.getElementById("lightProperty");
+    const lightMode = document.getElementById("lightMode");
+    const lightIntensityInput = document.getElementById("lightIntensityInput");
+    const lightDistanceInput = document.getElementById("lightDistanceInput");
+    const lightDecayInput = document.getElementById("lightDecayInput");
 
     const STORAGE_KEY = "game-engine-orbit-script-v2";
     const DEFAULT_SCRIPT = `const angle = context.time * context.speed;
@@ -1285,6 +1384,8 @@ object.rotation.y = angle * 57.2957795;`;
       selectedId: null,
       selectedAdvmngSlot: 0,
       advmngEditorOpen: false,
+      previewMode: "scene",
+      activeTool: "move",
       sceneZoom2d: 1,
       sceneZoom3d: 1,
       objects: [],
@@ -1308,6 +1409,8 @@ object.rotation.y = angle * 57.2957795;`;
       renderer: new THREE.WebGLRenderer({ antialias: true, alpha: true }),
       camera2d: new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, 1000),
       camera3d: new THREE.PerspectiveCamera(45, 1, 0.1, 1000),
+      cameraPreviewRenderer: new THREE.WebGLRenderer({ antialias: true, alpha: true }),
+      cameraPreviewCamera: new THREE.PerspectiveCamera(45, 1, 0.1, 1000),
       raycaster: new THREE.Raycaster(),
       pointer: new THREE.Vector2(),
       dragPlane: new THREE.Plane(),
@@ -1317,6 +1420,10 @@ object.rotation.y = angle * 57.2957795;`;
       grid2d: new THREE.GridHelper(20, 20, 0x47729b, 0x2a3549),
       grid3d: new THREE.GridHelper(20, 20, 0x47729b, 0x2a3549),
       axis: new THREE.AxesHelper(3),
+      gizmoGroup: new THREE.Group(),
+      gizmoAxes: new THREE.AxesHelper(1.0),
+      gizmoRing: new THREE.LineLoop(),
+      gizmoArrow: new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(), 1.4, 0x6cc1ff, 0.35, 0.2),
     };
 
     THREE_STATE.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -1334,6 +1441,27 @@ object.rotation.y = angle * 57.2957795;`;
     THREE_STATE.axis.visible = true;
 
     THREE_STATE.directional.position.set(6, 8, 5);
+    THREE_STATE.cameraPreviewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    THREE_STATE.cameraPreviewRenderer.setClearColor(0x000000, 0);
+    if (cameraPreviewViewport) {
+      cameraPreviewViewport.appendChild(THREE_STATE.cameraPreviewRenderer.domElement);
+    }
+
+    const gizmoRingPoints = [];
+    for (let i = 0; i <= 64; i += 1) {
+      const angle = (i / 64) * Math.PI * 2;
+      gizmoRingPoints.push(new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)));
+    }
+    const gizmoRingGeometry = new THREE.BufferGeometry().setFromPoints(gizmoRingPoints);
+    const gizmoRingMaterial = new THREE.LineBasicMaterial({ color: 0x6cc1ff, transparent: true, opacity: 0.95 });
+    THREE_STATE.gizmoAxes.visible = false;
+    THREE_STATE.gizmoRing = new THREE.LineLoop(gizmoRingGeometry, gizmoRingMaterial);
+    THREE_STATE.gizmoRing.visible = false;
+    THREE_STATE.gizmoArrow.visible = false;
+    THREE_STATE.gizmoGroup.add(THREE_STATE.gizmoAxes);
+    THREE_STATE.gizmoGroup.add(THREE_STATE.gizmoRing);
+    THREE_STATE.gizmoGroup.add(THREE_STATE.gizmoArrow);
+    THREE_STATE.scene.add(THREE_STATE.gizmoGroup);
     const gltfLoader = new GLTFLoader();
 
     function clamp(value, min, max) {
@@ -1614,6 +1742,8 @@ object.rotation.y = angle * 57.2957795;`;
 
       const id = `${type.toLowerCase()}-${index}`;
       const vrmRoot = type === "VRM" ? new THREE.Group() : null;
+      const gameCamera = type === "Camera" ? new THREE.PerspectiveCamera(50, 1, 0.1, 1000) : null;
+      const gameLight = type === "Light" ? new THREE.PointLight(0xffe08a, 1.35, 24, 2) : null;
       const mesh = new THREE.Mesh(geometry, material);
       mesh.castShadow = false;
       mesh.receiveShadow = false;
@@ -1623,6 +1753,10 @@ object.rotation.y = angle * 57.2957795;`;
         vrmRoot.userData.ownerId = id;
         vrmRoot.visible = false;
         THREE_STATE.scene.add(vrmRoot);
+      }
+      if (gameLight) {
+        gameLight.userData.ownerId = id;
+        THREE_STATE.scene.add(gameLight);
       }
 
       return {
@@ -1657,6 +1791,14 @@ object.rotation.y = angle * 57.2957795;`;
         vrmStatus: type === "VRM" ? "No model selected." : "",
         vrmLoading: false,
         vrmLoadToken: 0,
+        gameCamera,
+        cameraFov: type === "Camera" ? 50 : 0,
+        cameraNear: type === "Camera" ? 0.1 : 0,
+        cameraFar: type === "Camera" ? 1000 : 0,
+        gameLight,
+        lightIntensity: type === "Light" ? 1.35 : 0,
+        lightDistance: type === "Light" ? 24 : 0,
+        lightDecay: type === "Light" ? 2 : 0,
         advmngSlots: type === "ADVMNG" ? [
           { source: null, label: "Slot 1", position: { x: -256, y: -256 }, scale: { x: 1, y: 1 }, zIndex: 0, visible: true },
           { source: null, label: "Slot 2", position: { x: 0, y: -256 }, scale: { x: 1, y: 1 }, zIndex: 1, visible: true },
@@ -1796,6 +1938,56 @@ object.rotation.y = angle * 57.2957795;`;
         }
       }
       return null;
+    }
+
+    function getEditorCamera() {
+      return state.mode === "2d" ? THREE_STATE.camera2d : THREE_STATE.camera3d;
+    }
+
+    function getActiveGameCameraObject() {
+      const selected = getSelectedObject();
+      if (selected?.type === "Camera" && selected.gameCamera) {
+        return selected;
+      }
+
+      return state.objects.find((entry) => entry.type === "Camera" && entry.gameCamera) ?? null;
+    }
+
+    function getRenderCamera() {
+      if (state.previewMode !== "game") {
+        return getEditorCamera();
+      }
+
+      return getActiveGameCameraObject()?.gameCamera ?? getEditorCamera();
+    }
+
+    function setPreviewMode(mode) {
+      state.previewMode = mode;
+      const isGame = mode === "game";
+      sceneViewButton.classList.toggle("active", !isGame);
+      gameViewButton.classList.toggle("active", isGame);
+      sceneShell.classList.toggle("is-game-view", isGame);
+      const label = isGame ? `Game / ${state.mode === "2d" ? "2D" : "3D"}` : (state.mode === "2d" ? "2D" : "3D");
+      viewModeBadge.innerHTML = `View: <strong>${label}</strong>`;
+      modeStatus.textContent = isGame ? "Game View" : (state.mode === "2d" ? "2D mode: XY + Z layer" : "3D mode");
+      render();
+    }
+
+    function setActiveTool(tool) {
+      state.activeTool = tool;
+      moveToolButton.classList.toggle("active", tool === "move");
+      rotateToolButton.classList.toggle("active", tool === "rotate");
+      render();
+    }
+
+    function getObjectForwardVector(object) {
+      const euler = new THREE.Euler(
+        THREE.MathUtils.degToRad(object.rotation.x),
+        THREE.MathUtils.degToRad(object.rotation.y),
+        THREE.MathUtils.degToRad(object.rotation.z),
+        "XYZ",
+      );
+      return new THREE.Vector3(0, 0, -1).applyEuler(euler).normalize();
     }
 
     function clearVrmModel(object) {
@@ -2063,8 +2255,10 @@ object.rotation.y = angle * 57.2957795;`;
       mode2dButton.classList.toggle("active", is2d);
       mode3dButton.classList.toggle("active", !is2d);
       modeToggle.classList.toggle("active", is2d);
-      viewModeBadge.innerHTML = `View: <strong>${is2d ? "2D" : "3D"}</strong>`;
-      modeStatus.textContent = is2d ? "2D mode: XY + Z layer" : "3D mode";
+      viewModeBadge.innerHTML = `View: <strong>${state.previewMode === "game" ? `Game / ${is2d ? "2D" : "3D"}` : (is2d ? "2D" : "3D")}</strong>`;
+      modeStatus.textContent = state.previewMode === "game"
+        ? "Game View"
+        : (is2d ? "2D mode: XY + Z layer" : "3D mode");
       scriptMode.textContent = is2d
         ? "applies to the XY plane; Z is depth"
         : "applies to all Cubes around origin";
@@ -2326,6 +2520,39 @@ object.rotation.y = angle * 57.2957795;`;
         if (isImageObject(object) && object.preserveAspectRatio) {
           applyPngAspectRatio(object, axis);
         }
+      } else if (object.type === "Camera" && inputId === "cameraFovInput") {
+        object.cameraFov = clamp(value, 1, 179);
+        if (object.gameCamera) {
+          object.gameCamera.fov = object.cameraFov;
+          object.gameCamera.updateProjectionMatrix();
+        }
+      } else if (object.type === "Camera" && inputId === "cameraNearInput") {
+        object.cameraNear = Math.max(0.01, value);
+        if (object.gameCamera) {
+          object.gameCamera.near = object.cameraNear;
+          object.gameCamera.updateProjectionMatrix();
+        }
+      } else if (object.type === "Camera" && inputId === "cameraFarInput") {
+        object.cameraFar = Math.max(object.cameraNear + 0.01, value);
+        if (object.gameCamera) {
+          object.gameCamera.far = object.cameraFar;
+          object.gameCamera.updateProjectionMatrix();
+        }
+      } else if (object.type === "Light" && inputId === "lightIntensityInput") {
+        object.lightIntensity = Math.max(0, value);
+        if (object.gameLight) {
+          object.gameLight.intensity = object.lightIntensity;
+        }
+      } else if (object.type === "Light" && inputId === "lightDistanceInput") {
+        object.lightDistance = Math.max(0, value);
+        if (object.gameLight) {
+          object.gameLight.distance = object.lightDistance;
+        }
+      } else if (object.type === "Light" && inputId === "lightDecayInput") {
+        object.lightDecay = Math.max(0, value);
+        if (object.gameLight) {
+          object.gameLight.decay = object.lightDecay;
+        }
       } else if (isAdvmngObject(object) && inputId.startsWith("advmng")) {
         const slot = getActiveAdvmngSlot(object);
         if (!slot) {
@@ -2379,6 +2606,30 @@ object.rotation.y = angle * 57.2957795;`;
         object.mesh.visible = transformRoot === object.mesh;
         object.vrmRoot.visible = transformRoot === object.vrmRoot;
       }
+      if (object.type === "Camera") {
+        object.mesh.visible = state.previewMode !== "game";
+        if (object.gameCamera) {
+          object.gameCamera.position.set(object.position.x, object.position.y, object.position.z);
+          object.gameCamera.rotation.set(
+            THREE.MathUtils.degToRad(object.rotation.x),
+            THREE.MathUtils.degToRad(object.rotation.y),
+            THREE.MathUtils.degToRad(object.rotation.z),
+          );
+          object.gameCamera.fov = object.cameraFov ?? object.gameCamera.fov;
+          object.gameCamera.near = object.cameraNear ?? object.gameCamera.near;
+          object.gameCamera.far = object.cameraFar ?? object.gameCamera.far;
+          object.gameCamera.updateProjectionMatrix();
+        }
+      }
+      if (object.type === "Light") {
+        object.mesh.visible = state.previewMode !== "game";
+        if (object.gameLight) {
+          object.gameLight.position.set(object.position.x, object.position.y, object.position.z);
+          object.gameLight.intensity = object.lightIntensity ?? Math.max(0.4, object.scale.x);
+          object.gameLight.distance = object.lightDistance ?? object.gameLight.distance;
+          object.gameLight.decay = object.lightDecay ?? object.gameLight.decay;
+        }
+      }
       object.mesh.material.wireframe = false;
       if (isImageObject(object)) {
         object.mesh.material.map = object.texture ?? null;
@@ -2394,6 +2645,81 @@ object.rotation.y = angle * 57.2957795;`;
       if (object.mesh.material) {
         object.mesh.material.emissive = new THREE.Color(selected ? 0x1f5a45 : 0x000000);
         object.mesh.material.emissiveIntensity = selected ? 0.35 : 0.0;
+      }
+    }
+
+    function updateSceneGizmos() {
+      const object = getSelectedObject();
+      const showSceneGizmo = state.previewMode === "scene" && Boolean(object);
+
+      THREE_STATE.gizmoGroup.visible = showSceneGizmo;
+      THREE_STATE.gizmoAxes.visible = showSceneGizmo && state.activeTool === "move";
+      THREE_STATE.gizmoRing.visible = showSceneGizmo && state.activeTool === "rotate";
+      THREE_STATE.gizmoArrow.visible = showSceneGizmo && object?.type === "Camera";
+
+      if (!showSceneGizmo || !object) {
+        return;
+      }
+
+      const root = getTransformRoot(object) ?? object.mesh;
+      THREE_STATE.gizmoGroup.position.copy(root.position);
+      THREE_STATE.gizmoGroup.rotation.set(0, 0, 0);
+      const gizmoScale = Math.max(0.75, object.scale.x, object.scale.y, object.scale.z) * 1.25;
+      THREE_STATE.gizmoGroup.scale.setScalar(gizmoScale);
+
+      if (object.type === "Camera" && object.gameCamera) {
+        const forward = getObjectForwardVector(object);
+        THREE_STATE.gizmoArrow.position.set(0, 0, 0);
+        THREE_STATE.gizmoArrow.setDirection(forward);
+        THREE_STATE.gizmoArrow.setLength(1.8, 0.28, 0.2);
+      }
+    }
+
+    function updateCameraPreview() {
+      if (!cameraPreviewViewport || cameraProperty.hidden) {
+        return;
+      }
+
+      const object = getSelectedObject();
+      if (!object || object.type !== "Camera" || !object.gameCamera) {
+        return;
+      }
+
+      const rect = cameraPreviewViewport.getBoundingClientRect();
+      const width = Math.max(1, Math.floor(rect.width));
+      const height = Math.max(1, Math.floor(rect.height));
+      if (width < 2 || height < 2) {
+        return;
+      }
+
+      const hiddenObjects = [];
+      for (const entry of state.objects) {
+        if (entry.type === "Camera" || entry.type === "Light") {
+          hiddenObjects.push({ target: entry.mesh, visible: entry.mesh.visible });
+          entry.mesh.visible = false;
+        }
+      }
+      hiddenObjects.push({ target: THREE_STATE.grid2d, visible: THREE_STATE.grid2d.visible });
+      hiddenObjects.push({ target: THREE_STATE.grid3d, visible: THREE_STATE.grid3d.visible });
+      hiddenObjects.push({ target: THREE_STATE.axis, visible: THREE_STATE.axis.visible });
+      hiddenObjects.push({ target: THREE_STATE.gizmoGroup, visible: THREE_STATE.gizmoGroup.visible });
+      THREE_STATE.grid2d.visible = false;
+      THREE_STATE.grid3d.visible = false;
+      THREE_STATE.axis.visible = false;
+      THREE_STATE.gizmoGroup.visible = false;
+
+      THREE_STATE.cameraPreviewRenderer.setSize(width, height, false);
+      THREE_STATE.cameraPreviewCamera.fov = object.cameraFov ?? object.gameCamera.fov;
+      THREE_STATE.cameraPreviewCamera.near = object.cameraNear ?? object.gameCamera.near;
+      THREE_STATE.cameraPreviewCamera.far = object.cameraFar ?? object.gameCamera.far;
+      THREE_STATE.cameraPreviewCamera.aspect = width / height;
+      THREE_STATE.cameraPreviewCamera.position.copy(object.gameCamera.position);
+      THREE_STATE.cameraPreviewCamera.quaternion.copy(object.gameCamera.quaternion);
+      THREE_STATE.cameraPreviewCamera.updateProjectionMatrix();
+      THREE_STATE.cameraPreviewRenderer.render(THREE_STATE.scene, THREE_STATE.cameraPreviewCamera);
+
+      for (const entry of hiddenObjects) {
+        entry.target.visible = entry.visible;
       }
     }
 
@@ -2460,6 +2786,8 @@ object.rotation.y = angle * 57.2957795;`;
         pngProperty.hidden = true;
         vrmProperty.hidden = true;
         advmngProperty.hidden = true;
+        cameraProperty.hidden = true;
+        lightProperty.hidden = true;
         closeAdvmngEditor();
         return;
       }
@@ -2480,9 +2808,13 @@ object.rotation.y = angle * 57.2957795;`;
       pngProperty.hidden = !isImage || isAdvmngObject(object);
       vrmProperty.hidden = object.type !== "VRM";
       advmngProperty.hidden = !isAdvmngObject(object);
+      cameraProperty.hidden = object.type !== "Camera";
+      lightProperty.hidden = object.type !== "Light";
       pngMode.textContent = isImage && !isAdvmngObject(object) ? (object.textureLabel || "image asset") : "image asset";
       vrmMode.textContent = object.type === "VRM" ? (object.vrmStatus || "model asset") : "model asset";
       advmngMode.textContent = isAdvmngObject(object) ? (object.textureLabel || "4 PNG composite") : "4 PNG composite";
+      cameraMode.textContent = object.type === "Camera" ? "Scene view target" : "view target";
+      lightMode.textContent = object.type === "Light" ? "Scene light" : "scene light";
       if (isImage && !isAdvmngObject(object)) {
         pngLockAspect.checked = Boolean(object.preserveAspectRatio);
         pngZIndexInput.value = object.position.z.toFixed(1);
@@ -2502,6 +2834,16 @@ object.rotation.y = angle * 57.2957795;`;
         vrmPreview.textContent = object.vrmStatus || "No VRM selected.";
         vrmUrlInput.value = object.vrmSourceUrl || "";
         vrmFileInput.value = "";
+      }
+      if (object.type === "Camera") {
+        cameraFovInput.value = String(object.cameraFov ?? object.gameCamera?.fov ?? 50);
+        cameraNearInput.value = String(object.cameraNear ?? object.gameCamera?.near ?? 0.1);
+        cameraFarInput.value = String(object.cameraFar ?? object.gameCamera?.far ?? 1000);
+      }
+      if (object.type === "Light") {
+        lightIntensityInput.value = String(object.lightIntensity ?? object.gameLight?.intensity ?? 1.35);
+        lightDistanceInput.value = String(object.lightDistance ?? object.gameLight?.distance ?? 24);
+        lightDecayInput.value = String(object.lightDecay ?? object.gameLight?.decay ?? 2);
       }
       if (isAdvmngObject(object)) {
         const slot = getActiveAdvmngSlot(object);
@@ -2564,6 +2906,12 @@ object.rotation.y = angle * 57.2957795;`;
         THREE_STATE.camera3d.updateProjectionMatrix();
       }
 
+      const gameCameraObject = getActiveGameCameraObject();
+      if (gameCameraObject?.gameCamera) {
+        gameCameraObject.gameCamera.aspect = aspect;
+        gameCameraObject.gameCamera.updateProjectionMatrix();
+      }
+
       THREE_STATE.renderer.setSize(width, height, false);
     }
 
@@ -2578,6 +2926,8 @@ object.rotation.y = angle * 57.2957795;`;
       renderHierarchy();
       renderSceneObjects();
       syncInspector();
+      updateSceneGizmos();
+      updateCameraPreview();
       updateStats();
       renderThree();
     }
@@ -2589,7 +2939,7 @@ object.rotation.y = angle * 57.2957795;`;
     }
 
     function renderThree() {
-      const camera = state.mode === "2d" ? THREE_STATE.camera2d : THREE_STATE.camera3d;
+      const camera = getRenderCamera();
       THREE_STATE.renderer.render(THREE_STATE.scene, camera);
     }
 
@@ -2602,16 +2952,33 @@ object.rotation.y = angle * 57.2957795;`;
     }
 
     function pickObject(event) {
+      if (state.previewMode === "game") {
+        return null;
+      }
       const ndc = getPointerNDC(event);
-      const camera = state.mode === "2d" ? THREE_STATE.camera2d : THREE_STATE.camera3d;
+      const camera = getEditorCamera();
       THREE_STATE.raycaster.setFromCamera(ndc, camera);
       const hits = THREE_STATE.raycaster.intersectObjects(state.objects.flatMap((object) => getPickRoots(object)), true);
       return hits[0]?.object ?? null;
     }
 
     function startDrag(event, object) {
+      if (state.previewMode === "game") {
+        return;
+      }
+      if (state.activeTool === "rotate") {
+        state.dragging = {
+          kind: "rotate-object",
+          objectId: object.id,
+          pointerId: event.pointerId,
+          startRotation: { ...object.rotation },
+          startClientX: event.clientX,
+        };
+        viewport.setPointerCapture(event.pointerId);
+        return;
+      }
       const ndc = getPointerNDC(event);
-      const camera = state.mode === "2d" ? THREE_STATE.camera2d : THREE_STATE.camera3d;
+      const camera = getEditorCamera();
       THREE_STATE.raycaster.setFromCamera(ndc, camera);
       const root = getTransformRoot(object);
 
@@ -2628,12 +2995,32 @@ object.rotation.y = angle * 57.2957795;`;
     }
 
     function updateDrag(event) {
+      if (state.previewMode === "game") {
+        return;
+      }
+      if (state.dragging?.kind === "rotate-object" && state.dragging.pointerId === event.pointerId) {
+        const object = state.objects.find((entry) => entry.id === state.dragging.objectId);
+        if (!object) {
+          return;
+        }
+
+        const delta = (event.clientX - state.dragging.startClientX) * 0.45;
+        if (state.mode === "2d") {
+          object.rotation.z = state.dragging.startRotation.z + delta;
+        } else {
+          object.rotation.y = state.dragging.startRotation.y + delta;
+        }
+
+        syncObject(object);
+        render();
+        return;
+      }
       if (!state.dragging || state.dragging.kind !== "object" || state.dragging.pointerId !== event.pointerId) return;
       const object = state.objects.find((entry) => entry.id === state.dragging.objectId);
       if (!object) return;
 
       const ndc = getPointerNDC(event);
-      const camera = state.mode === "2d" ? THREE_STATE.camera2d : THREE_STATE.camera3d;
+      const camera = getEditorCamera();
       THREE_STATE.raycaster.setFromCamera(ndc, camera);
 
       const hitPoint = new THREE.Vector3();
@@ -2775,8 +3162,10 @@ object.rotation.y = angle * 57.2957795;`;
 
       state.objects.splice(index, 1);
       THREE_STATE.scene.remove(object.mesh);
+      object.gameLight && THREE_STATE.scene.remove(object.gameLight);
       object.vrmRoot && THREE_STATE.scene.remove(object.vrmRoot);
       disposeObject3D(object.mesh);
+      disposeObject3D(object.gameLight);
       disposeObject3D(object.vrmRoot);
       object.texture?.dispose?.();
       if (object.vrmObjectUrl?.startsWith("blob:")) {
@@ -2803,6 +3192,10 @@ object.rotation.y = angle * 57.2957795;`;
     addObjectButton.addEventListener("click", () => {
       addObject(addTypeSelect.value);
     });
+    sceneViewButton.addEventListener("click", () => setPreviewMode("scene"));
+    gameViewButton.addEventListener("click", () => setPreviewMode("game"));
+    moveToolButton.addEventListener("click", () => setActiveTool("move"));
+    rotateToolButton.addEventListener("click", () => setActiveTool("rotate"));
     modeToggle.addEventListener("click", () => setMode(state.mode === "2d" ? "3d" : "2d"));
     mode2dButton.addEventListener("click", () => setMode("2d"));
     mode3dButton.addEventListener("click", () => setMode("3d"));
@@ -3102,6 +3495,11 @@ object.rotation.y = angle * 57.2957795;`;
     Object.entries(inputs).forEach(([id, input]) => {
       input.addEventListener("input", () => updateInspectorField(id, input.value));
     });
+    [cameraFovInput, cameraNearInput, cameraFarInput, lightIntensityInput, lightDistanceInput, lightDecayInput].forEach((input) => {
+      input.addEventListener("input", () => {
+        updateInspectorField(input.id, input.value);
+      });
+    });
 
     viewport.addEventListener("pointerdown", (event) => {
       const hit = pickObject(event);
@@ -3155,8 +3553,10 @@ object.rotation.y = angle * 57.2957795;`;
     state.objects.push(createCube("Cube"));
     state.selectedId = state.objects[0].id;
     compileScript();
+    setActiveTool(state.activeTool);
     updateCamera();
     setMode(state.mode);
+    setPreviewMode(state.previewMode);
     render();
   </script>
 </body>
