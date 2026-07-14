@@ -256,6 +256,23 @@ app.playImageAnimation(sheet, cube.id);</pre>
 app.playVrmMotion(vrm, "idle");
 app.seekVrmMotion(vrm, 0.5);</pre>
             </div>
+            <div class="card">
+              <h3>5. アプリ起動時の初期化</h3>
+              <p>起動時に Scene を組み立てて、ゲームとしての初期状態を作ります。</p>
+              <pre class="code">app.onReady(() => {
+  const scene = app.scene.create("MainScene");
+  const player = app.spawn("Empty", { position: { x: 0, y: 0, z: 0 } });
+  scene.add(player);
+  app.scene.open("MainScene");
+});</pre>
+            </div>
+            <div class="card">
+              <h3>6. 出力用の操作例</h3>
+              <p>実行中の状態をまとめて、あとでアプリ出力に繋げやすい形にします。</p>
+              <pre class="code">app.command("moveForward", { speed: 2.0 });
+app.command("setPose", { name: "idle" });
+app.command("captureState");</pre>
+            </div>
           </div>
         </article>
 
@@ -281,6 +298,35 @@ app.playVrmMotion(motion, "idle");
 input.on("Space", () => {
   helper.transform.rotate(0, 90, 0);
 });</pre>
+        </article>
+
+        <article class="section">
+          <h2>Asset Examples</h2>
+          <div class="grid">
+            <div class="card">
+              <h3>PNG Animation</h3>
+              <p>画像アニメーションは、SpriteSheet を読み込んで再生できます。</p>
+              <pre class="code">const run = await app.loadImageAnimation(
+  ["run_01.png", "run_02.png", "run_03.png"],
+  { loop: true, fps: 12 }
+);
+app.playImageAnimation(run, cube.id);</pre>
+            </div>
+            <div class="card">
+              <h3>VRM Pose / Motion</h3>
+              <p>VRM は待機ポーズとモーションを分けて切り替えられます。</p>
+              <pre class="code">const avatar = await app.loadVrm("assets/character.vrm");
+app.playVrmMotion(avatar, "idle");
+app.playVrmMotion(avatar, "wave");</pre>
+            </div>
+            <div class="card">
+              <h3>Editor Script</h3>
+              <p>Editor で同じスクリプトを使えば、Play で挙動確認できます。</p>
+              <pre class="code">const target = app.spawn("Cube");
+app.setCameraTarget(target);
+app.select(target.id);</pre>
+            </div>
+          </div>
         </article>
       </div>
 
@@ -309,6 +355,10 @@ input.on("Space", () => {
               <strong>Control from script</strong>
               <span>スクリプトで再生や切り替えを操作できるので、後でアプリ出力に繋げやすいです。</span>
             </div>
+            <div class="list-item">
+              <strong>Export-ready</strong>
+              <span>同じ API を editor とアプリの両方で使えるようにして、実装と公開の差を減らします。</span>
+            </div>
           </div>
         </section>
 
@@ -320,6 +370,14 @@ input.on("Space", () => {
 4. press Play
 5. run script
 6. export app</pre>
+        </section>
+
+        <section class="section">
+          <h2>Next Step</h2>
+          <p>
+            まずは <a class="link" href="./editor-three.html">Editor Mock</a> で動作を確認し、
+            必要な API を <a class="link" href="./sample.html">Sample Page</a> から参照する流れがわかりやすいです。
+          </p>
         </section>
       </aside>
     </section>
