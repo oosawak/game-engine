@@ -97,12 +97,12 @@
 
 ## Phase 9: 入力とリソース
 
-- [ ] `InputManager` を実装する
-- [ ] `KeyboardInput` を実装する
-- [ ] `PointerInput` を実装する
-- [ ] `Resource` を実装する
-- [ ] `ResourceLoader` を実装する
-- [ ] `ResourceManager` を実装する
+- [x] `InputManager` を実装する
+- [x] `KeyboardInput` を実装する
+- [x] `PointerInput` を実装する
+- [x] `Resource` を実装する
+- [x] `ResourceLoader` を実装する
+- [x] `ResourceManager` を実装する
 
 ## Phase 10: WASM ブリッジ
 

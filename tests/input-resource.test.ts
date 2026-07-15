@@ -3,6 +3,37 @@ import { InputManager } from "../src/engine/input/InputManager.js";
 import { ResourceManager } from "../src/engine/resource/ResourceManager.js";
 
 describe("Input and resource systems", () => {
+  it("attaches and detaches input listeners", () => {
+    const listeners = new Map<string, EventListener[]>();
+    const target = {
+      addEventListener: (type: string, listener: EventListener) => {
+        const list = listeners.get(type) ?? [];
+        list.push(listener);
+        listeners.set(type, list);
+      },
+      removeEventListener: (type: string, listener: EventListener) => {
+        const list = listeners.get(type) ?? [];
+        listeners.set(
+          type,
+          list.filter((entry) => entry !== listener),
+        );
+      },
+    };
+
+    const input = new InputManager({
+      target,
+      pointerTarget: target,
+    });
+
+    input.attach();
+    expect(listeners.get("keydown")).toHaveLength(1);
+    expect(listeners.get("pointermove")).toHaveLength(1);
+
+    input.detach();
+    expect(listeners.get("keydown")).toHaveLength(0);
+    expect(listeners.get("pointermove")).toHaveLength(0);
+  });
+
   it("tracks keyboard and pointer state", () => {
     const input = new InputManager();
     const keyboard = input.getKeyboard();
