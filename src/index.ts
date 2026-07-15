@@ -2,6 +2,8 @@ export * from "./engine/core/Engine.js";
 export * from "./engine/core/GameLoop.js";
 export * from "./engine/core/Time.js";
 export * from "./engine/component/Component.js";
+export * from "./engine/component/CameraComponent.js";
+export * from "./engine/component/LightComponent.js";
 export * from "./engine/component/Transform.js";
 export * from "./engine/math/Matrix4.js";
 export * from "./engine/math/Quaternion.js";
