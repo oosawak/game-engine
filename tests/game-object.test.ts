@@ -20,6 +20,7 @@ describe("GameObject", () => {
     const object = new GameObject("Player");
     const component = object.addComponent(new CounterComponent());
 
+    expect(component.owner).toBe(object);
     object.activate();
     object.update(0.016);
 
@@ -40,5 +41,20 @@ describe("GameObject", () => {
 
     expect(component.updated).toBe(1);
     expect(child.parentObject).toBe(parent);
+  });
+
+  it("clears component owner when removed or destroyed", () => {
+    const object = new GameObject("Cleanup");
+    const component = object.addComponent(new CounterComponent());
+
+    expect(object.removeComponent(component)).toBe(true);
+    expect(component.owner).toBeNull();
+
+    const other = new GameObject("Other");
+    const otherComponent = other.addComponent(new CounterComponent());
+
+    other.destroy();
+
+    expect(otherComponent.owner).toBeNull();
   });
 });

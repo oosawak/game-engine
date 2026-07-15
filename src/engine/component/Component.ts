@@ -1,14 +1,15 @@
 import type { GameObject } from "../object/GameObject.js";
 
+const componentOwners = new WeakMap<Component, GameObject | null>();
+
 export abstract class Component {
-  private _owner: GameObject | null = null;
   private _started = false;
   private _destroyed = false;
 
   public enabled = true;
 
   public get owner(): GameObject | null {
-    return this._owner;
+    return componentOwners.get(this) ?? null;
   }
 
   public get isStarted(): boolean {
@@ -17,10 +18,6 @@ export abstract class Component {
 
   public get isDestroyed(): boolean {
     return this._destroyed;
-  }
-
-  public setOwner(owner: GameObject | null): void {
-    this._owner = owner;
   }
 
   public internalStart(): void {
@@ -64,4 +61,8 @@ export abstract class Component {
   protected render(): void {}
 
   protected destroy(): void {}
+}
+
+export function attachComponentOwner(component: Component, owner: GameObject | null): void {
+  componentOwners.set(component, owner);
 }

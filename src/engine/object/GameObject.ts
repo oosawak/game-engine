@@ -1,4 +1,4 @@
-import { Component } from "../component/Component.js";
+import { Component, attachComponentOwner } from "../component/Component.js";
 import { Transform } from "../component/Transform.js";
 
 let nextGameObjectId = 1;
@@ -69,7 +69,7 @@ export class GameObject {
     }
 
     component.internalDestroy();
-    component.setOwner(null);
+    attachComponentOwner(component, null);
     this.components.splice(index, 1);
     return true;
   }
@@ -174,7 +174,7 @@ export class GameObject {
 
     for (const component of [...this.components]) {
       component.internalDestroy();
-      component.setOwner(null);
+      attachComponentOwner(component, null);
     }
 
     this.components.length = 0;
@@ -184,7 +184,7 @@ export class GameObject {
   }
 
   private attachComponent(component: Component): void {
-    component.setOwner(this);
+    attachComponentOwner(component, this);
     this.components.push(component);
   }
 }

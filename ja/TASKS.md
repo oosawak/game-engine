@@ -29,56 +29,56 @@
 
 ## Phase 2: Component コア
 
-- [ ] `Component` を実装する
-- [ ] `start`、`update`、`render`、`destroy` のライフサイクル保護を実装する
-- [ ] `Component` の所有者を内部からのみ設定できるようにする
-- [ ] ライフサイクル状態遷移の単体テストを追加する
+- [x] `Component` を実装する
+- [x] `start`、`update`、`render`、`destroy` のライフサイクル保護を実装する
+- [x] `Component` の所有者を内部からのみ設定できるようにする
+- [x] ライフサイクル状態遷移の単体テストを追加する
 
 ## Phase 3: Transform
 
-- [ ] 必須コンポーネントとして `Transform` を実装する
-- [ ] position、rotation、scale の状態を追加する
-- [ ] 移動と回転の補助メソッドを追加する
-- [ ] Transform 変化の単体テストを追加する
+- [x] 必須コンポーネントとして `Transform` を実装する
+- [x] position、rotation、scale の状態を追加する
+- [x] 移動と回転の補助メソッドを追加する
+- [x] Transform 変化の単体テストを追加する
 
 ## Phase 4: GameObject
 
-- [ ] `GameObject` を実装する
-- [ ] 全 `GameObject` に `Transform` を付与する
-- [ ] Component の追加を実装する
-- [ ] 型指定で Component を取得する処理を実装する
-- [ ] `Transform` 保護付きの Component 削除を実装する
-- [ ] 子オブジェクト管理を実装する
-- [ ] 有効化と無効化を実装する
-- [ ] 破棄時の安全性を実装する
-- [ ] Component 追加とライフサイクル伝播のテストを追加する
-- [ ] 親子関係のテストを追加する
+- [x] `GameObject` を実装する
+- [x] 全 `GameObject` に `Transform` を付与する
+- [x] Component の追加を実装する
+- [x] 型指定で Component を取得する処理を実装する
+- [x] `Transform` 保護付きの Component 削除を実装する
+- [x] 子オブジェクト管理を実装する
+- [x] 有効化と無効化を実装する
+- [x] 破棄時の安全性を実装する
+- [x] Component 追加とライフサイクル伝播のテストを追加する
+- [x] 親子関係のテストを追加する
 
 ## Phase 5: Scene System
 
-- [ ] `Scene` を実装する
-- [ ] `SceneManager` を実装する
-- [ ] 複数シーンの登録を可能にする
-- [ ] シーン切り替えを可能にする
-- [ ] Scene の有効化と終了処理を実装する
-- [ ] アクティブなオブジェクトのみ update / render するようにする
-- [ ] シーン登録と切り替えのテストを追加する
+- [x] `Scene` を実装する
+- [x] `SceneManager` を実装する
+- [x] 複数シーンの登録を可能にする
+- [x] シーン切り替えを可能にする
+- [x] Scene の有効化と終了処理を実装する
+- [x] アクティブなオブジェクトのみ update / render するようにする
+- [x] シーン登録と切り替えのテストを追加する
 
 ## Phase 6: Timing と Engine Core
 
-- [ ] `Time` を実装する
-- [ ] `GameLoop` を実装する
-- [ ] `Engine` を実装する
-- [ ] `Engine` と `SceneManager` と `Time` を接続する
-- [ ] start / stop を実装する
-- [ ] Delta Time 計算を実装する
-- [ ] ループ制御と時間管理のテストを追加する
+- [x] `Time` を実装する
+- [x] `GameLoop` を実装する
+- [x] `Engine` を実装する
+- [x] `Engine` と `SceneManager` と `Time` を接続する
+- [x] start / stop を実装する
+- [x] Delta Time 計算を実装する
+- [x] ループ制御と時間管理のテストを追加する
 
 ## Phase 7: Script Support
 
 - [x] `ScriptComponent` を実装する
 - [x] スクリプトのライフサイクル契約を定義する
-- [ ] サンプルのゲームプレイ用コンポーネントを追加する
+- [x] サンプルのゲームプレイ用コンポーネントを追加する
 - [x] ユーザー定義 Component 実行のテストを追加する
 
 ## Phase 8: 描画境界
@@ -86,10 +86,10 @@
 - [x] `Renderer` インターフェースを定義する
 - [x] `RenderContext` を定義する
 - [x] `RendererComponent` を実装する
-- [ ] `CameraComponent` を実装する
-- [ ] `LightComponent` を実装する
-- [ ] Camera の視野、投影方式、ズーム、追従対象を定義する
-- [ ] Light の種類、強度、色、影響範囲を定義する
+- [x] `CameraComponent` を実装する
+- [x] `LightComponent` を実装する
+- [x] Camera の視野、投影方式、ズーム、追従対象を定義する
+- [x] Light の種類、強度、色、影響範囲を定義する
 - [ ] Scene の描画に Camera を必ず経由させる
 - [ ] Light を使う描画パスの入口を用意する
 - [ ] `Mesh`、`Material`、`Shader` のプレースホルダ型を追加する
@@ -113,13 +113,13 @@
 
 ## Phase 11: アプリケーション層
 
-- [ ] `Game` を実装する
-- [ ] `MainScene` を実装する
-- [ ] 最小の起動処理を追加する
-- [ ] 動くオブジェクトを含むサンプルシーンを追加する
-- [ ] `Game View` 用の実行時ルートを定義する
-- [ ] エディタ表示と実行表示の責務を分ける
-- [ ] アプリケーションの起動処理から Scene を差し替えられるようにする
+- [x] `Game` を実装する
+- [x] `MainScene` を実装する
+- [x] 最小の起動処理を追加する
+- [x] 動くオブジェクトを含むサンプルシーンを追加する
+- [x] `Game View` 用の実行時ルートを定義する
+- [x] エディタ表示と実行表示の責務を分ける
+- [x] アプリケーションの起動処理から Scene を差し替えられるようにする
 
 ## Phase 12: 品質と検証
 
