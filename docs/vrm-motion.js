@@ -24,9 +24,20 @@ const state = {
 const refs = {};
 let motions = cloneMotionList(DEFAULT_MOTIONS);
 let tags = [...DEFAULT_TAGS];
+let baseMotions = cloneMotionList(DEFAULT_MOTIONS);
+const PRESET_POSES = {
+  idle: { label: "Idle / Wait", templateId: "vrm_idle_default" },
+  bow: { label: "Bow", templateId: "motion_bow_polite" },
+  wave: { label: "Wave", templateId: "motion_wave_right" },
+  attack: { label: "Attack", templateId: "motion_attack_light" },
+};
 
 function cloneMotionList(list) {
   return list.map((motion) => ({ ...motion, tags: [...(motion.tags ?? [])] }));
+}
+
+function cloneMotion(motion) {
+  return motion ? { ...motion, tags: [...(motion.tags ?? [])] } : null;
 }
 
 function normalize(value) {
@@ -119,6 +130,7 @@ function uniqueTags(list, providedTags = []) {
 function applyMotionData(rawData) {
   const loadedMotions = extractMotionEntries(rawData).map(normalizeMotion).filter(Boolean);
   motions = loadedMotions.length ? loadedMotions : cloneMotionList(DEFAULT_MOTIONS);
+  baseMotions = cloneMotionList(motions);
   tags = uniqueTags(motions, Array.isArray(rawData?.tags) ? rawData.tags : DEFAULT_TAGS);
 
   if (!motions.some((motion) => motion.id === state.selectedId)) {
@@ -131,6 +143,58 @@ function applyMotionData(rawData) {
 
 function getSelectedMotion() {
   return motions.find((motion) => motion.id === state.selectedId) ?? motions[0] ?? null;
+}
+
+function getBaseMotion(id) {
+  return baseMotions.find((motion) => motion.id === id) ?? null;
+}
+
+function applyMotionSnapshot(target, snapshot) {
+  if (!target || !snapshot) {
+    return;
+  }
+
+  target.alias = snapshot.alias;
+  target.scriptName = snapshot.scriptName;
+  target.displayName = snapshot.displayName;
+  target.source = snapshot.source;
+  target.tags = [...snapshot.tags];
+  target.priority = snapshot.priority;
+  target.loop = snapshot.loop;
+  target.duration = snapshot.duration;
+}
+
+function resetSelectedMotion() {
+  const motion = getSelectedMotion();
+  const snapshot = motion ? getBaseMotion(motion.id) : null;
+  if (!motion || !snapshot) {
+    return;
+  }
+
+  applyMotionSnapshot(motion, snapshot);
+  state.playing = snapshot.displayName;
+  render();
+}
+
+function applyPresetPose(presetId) {
+  const motion = getSelectedMotion();
+  const preset = PRESET_POSES[presetId];
+  if (!motion || !preset) {
+    return;
+  }
+
+  const snapshot = getBaseMotion(preset.templateId)
+    ?? motions.find((entry) => entry.id === preset.templateId)
+    ?? null;
+
+  if (!snapshot) {
+    return;
+  }
+
+  applyMotionSnapshot(motion, snapshot);
+  state.selectedId = motion.id;
+  state.playing = preset.label;
+  render();
 }
 
 function matchesMotion(motion) {
@@ -208,6 +272,7 @@ function renderDetails() {
   refs.overlayId.textContent = motion.id;
   refs.overlayScriptName.textContent = motion.scriptName;
   refs.playingLabel.textContent = `Playing: ${state.playing}`;
+  refs.presetPose.value = Object.entries(PRESET_POSES).find(([, preset]) => preset.templateId === motion.id)?.[0] ?? "idle";
   refs.detailId.textContent = motion.id;
   refs.detailScriptName.value = motion.scriptName;
   refs.detailAlias.value = motion.alias;
@@ -348,9 +413,11 @@ async function init() {
   refs.codeSnippet = document.getElementById("codeSnippet");
   refs.footerSummary = document.getElementById("footerSummary");
   refs.saveStatus = document.getElementById("saveStatus");
+  refs.resetButton = document.getElementById("resetButton");
   refs.backButton = document.getElementById("backButton");
   refs.saveButton = document.getElementById("saveButton");
   refs.loadButton = document.getElementById("loadButton");
+  refs.presetPose = document.getElementById("presetPose");
 
   await loadManifest();
 
@@ -383,6 +450,14 @@ async function init() {
   refs.loadButton.addEventListener("click", () => {
     restoreSavedState();
     render();
+  });
+
+  refs.resetButton.addEventListener("click", () => {
+    resetSelectedMotion();
+  });
+
+  refs.presetPose.addEventListener("change", () => {
+    applyPresetPose(refs.presetPose.value);
   });
 
   bindInput(refs.detailScriptName, (motion, value) => { motion.scriptName = value || motion.id; });

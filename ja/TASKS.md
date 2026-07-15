@@ -161,8 +161,8 @@
 - [x] VRM Editor の中央ペインにプレビューと再生制御を表示する
 - [x] VRM Editor の右ペインに名前編集と詳細設定を表示する
 - [x] 標準ポーズを `Idle / Wait` として定義する
-- [ ] `Reset Pose` を実装する
-- [ ] `Preset Pose` の選択を実装する
+- [x] `Reset Pose` を実装する
+- [x] `Preset Pose` の選択を実装する
 - [x] モーションの `id` と `alias` を登録できるようにする
 - [x] スクリプトからは `id` で参照し、`alias` でも検索できるようにする
 - [x] VRM Editor でモーション一覧と名前編集欄を表示する

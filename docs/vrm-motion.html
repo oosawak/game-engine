@@ -378,6 +378,7 @@
       </div>
       <div class="topbar-actions">
         <span class="action-pill" id="saveStatus">No local save</span>
+        <button class="mini-button" id="resetButton" type="button">Reset Pose</button>
         <a class="mini-button" href="./vrm-editor.html">Back to Editor</a>
         <button class="mini-button" id="saveButton" type="button">Save</button>
         <button class="mini-button active" id="loadButton" type="button">Load</button>
@@ -452,6 +453,15 @@
         </div>
         <div class="panel-body">
           <div class="details">
+            <div class="field">
+              <div class="field-label"><span>Preset Pose</span><span>Template</span></div>
+              <select id="presetPose" class="input">
+                <option value="idle">Idle / Wait</option>
+                <option value="bow">Bow</option>
+                <option value="wave">Wave</option>
+                <option value="attack">Attack</option>
+              </select>
+            </div>
             <div class="field">
               <div class="field-label"><span>Source</span><span>File</span></div>
               <input id="detailSource" class="input" type="text" value="motions/idle.vrma" />
