@@ -162,6 +162,27 @@
     }
     .panel-subtle { color: var(--muted); font-size: 12px; font-weight: 500; }
     .panel-body { min-height: 0; padding: 12px; overflow: auto; }
+    .panel-tools {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .search-input {
+      width: 100%;
+      min-width: 0;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(9, 12, 19, 0.85);
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+    }
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
     .list, .meta-list { display: grid; gap: 10px; }
     .motion-card {
       display: grid;
@@ -373,57 +394,47 @@
       <aside class="panel">
         <div class="panel-header">
           <span>Motion List</span>
-          <div class="panel-actions"><span class="panel-subtle">12 items</span></div>
+          <div class="panel-actions">
+            <span class="panel-subtle" id="motionCount">12 items</span>
+          </div>
         </div>
         <div class="panel-body">
-          <div class="list">
-            <article class="motion-card active">
-              <div class="motion-title"><span>Idle / Wait</span><span>vrm_idle_default</span></div>
-              <div class="motion-subtitle">基準姿勢。表示名は `待機`、alias は `待機`。</div>
-              <div class="tag-row"><span class="tag">loop</span><span class="tag">default</span><span class="tag">safe</span></div>
-            </article>
-            <article class="motion-card">
-              <div class="motion-title"><span>Walk</span><span>motion_walk_normal</span></div>
-              <div class="motion-subtitle">歩行モーション。スクリプトからは ID 指定。</div>
-              <div class="tag-row"><span class="tag">loop</span><span class="tag">locomotion</span><span class="tag">alias: 歩き</span></div>
-            </article>
-            <article class="motion-card">
-              <div class="motion-title"><span>Bow</span><span>motion_bow_polite</span></div>
-              <div class="motion-subtitle">おじぎ動作。単発再生の候補。</div>
-              <div class="tag-row"><span class="tag">once</span><span class="tag">gesture</span><span class="tag">alias: おじぎ</span></div>
-            </article>
-            <article class="motion-card">
-              <div class="motion-title"><span>Wave</span><span>motion_wave_right</span></div>
-              <div class="motion-subtitle">手を振るアニメーション。会話時の反応用。</div>
-              <div class="tag-row"><span class="tag">once</span><span class="tag">emote</span><span class="tag">alias: 挨拶</span></div>
-            </article>
+          <div class="panel-tools">
+            <input id="motionSearch" class="search-input" type="search" placeholder="Search by id / alias / name" />
+            <div class="filter-row" id="tagFilters"></div>
           </div>
+          <div class="list" id="motionList"></div>
         </div>
       </aside>
 
       <section class="panel">
         <div class="panel-header">
           <span>Preview</span>
-          <div class="panel-actions"><span class="panel-subtle">Playing: Idle / Wait</span></div>
+          <div class="panel-actions">
+            <span class="panel-subtle" id="playingLabel">Playing: Idle / Wait</span>
+          </div>
         </div>
         <div class="panel-body preview">
           <div class="preview-stage">
             <div class="avatar" aria-hidden="true"></div>
             <div class="preview-overlay">
-              <span class="overlay-badge">Selected <strong>vrm_idle_default</strong></span>
-              <span class="overlay-badge">Alias <strong>待機</strong></span>
+              <span class="overlay-badge">Selected <strong id="overlayId">vrm_idle_default</strong></span>
+              <span class="overlay-badge">Alias <strong id="overlayAlias">待機</strong></span>
             </div>
           </div>
           <div class="timeline">
             <div class="controls">
               <div class="group">
-                <button class="mini-button active">Play</button>
-                <button class="mini-button">Stop</button>
-                <button class="mini-button">Loop</button>
+                <button class="mini-button active" id="playButton" type="button">Play</button>
+                <button class="mini-button" id="stopButton" type="button">Stop</button>
+                <button class="mini-button" id="loopButton" type="button">Loop</button>
               </div>
-              <div class="group"><span class="panel-subtle">Seek 00:05 / 00:12</span></div>
+              <div class="group">
+                <span class="panel-subtle">Seek</span>
+                <input id="seekLabel" class="search-input" type="range" min="0" max="100" value="38" />
+              </div>
             </div>
-            <div class="timeline-bar"><span></span></div>
+            <div class="timeline-bar"><span id="timelineProgress"></span></div>
           </div>
           <div class="note">
             スクリプトは `id` を使ってモーションを指定し、`alias` は編集画面で付ける運用を想定します。
@@ -435,38 +446,40 @@
       <aside class="panel">
         <div class="panel-header">
           <span>Motion Details</span>
-          <div class="panel-actions"><span class="panel-subtle">Editable</span></div>
+          <div class="panel-actions">
+            <span class="panel-subtle">Editable</span>
+          </div>
         </div>
         <div class="panel-body">
           <div class="details">
             <div class="field">
               <div class="field-label"><span>ID</span><span>Required</span></div>
-              <div class="field-value">vrm_idle_default</div>
+              <div class="field-value" id="detailId">vrm_idle_default</div>
             </div>
             <div class="field">
               <div class="field-label"><span>Alias</span><span>Optional</span></div>
-              <div class="field-value">待機</div>
+              <input id="detailAlias" class="input" type="text" value="待機" />
             </div>
             <div class="field">
               <div class="field-label"><span>Display Name</span><span>UI</span></div>
-              <div class="field-value">Idle / Wait</div>
+              <input id="detailDisplayName" class="input" type="text" value="Idle / Wait" />
             </div>
             <div class="input-row">
               <label class="field">
                 <div class="field-label"><span>Source</span><span>BVH / VRMA / GLB</span></div>
-                <input class="input" type="text" value="motions/idle.bvh" />
+                <input id="detailSource" class="input" type="text" value="motions/idle.bvh" />
               </label>
               <label class="field">
                 <div class="field-label"><span>Tags</span><span>Comma separated</span></div>
-                <input class="input" type="text" value="idle, loop, default" />
+                <input id="detailTags" class="input" type="text" value="idle, loop, default" />
               </label>
               <label class="field">
                 <div class="field-label"><span>Priority</span><span>0 - 100</span></div>
-                <input class="input" type="number" value="10" min="0" max="100" />
+                <input id="detailPriority" class="input" type="number" value="10" min="0" max="100" />
               </label>
               <label class="field">
                 <div class="field-label"><span>Loop</span><span>Playback</span></div>
-                <input class="input" type="text" value="true" />
+                <input id="detailLoop" class="input" type="text" value="true" />
               </label>
             </div>
             <div class="note">
@@ -479,9 +492,10 @@
     </section>
 
     <footer class="footer">
-      <div>VRM Editor Mock · 3 pane layout</div>
+      <div id="footerSummary">VRM Editor Mock · 3 pane layout</div>
       <div>Scene / Editor / Preview · Reset Pose / Preset Pose / Save / Load</div>
     </footer>
   </main>
+  <script type="module" src="../docs/vrm-editor.js"></script>
 </body>
 </html>
