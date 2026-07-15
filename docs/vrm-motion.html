@@ -450,6 +450,34 @@
               </div>
             </div>
             <div class="field">
+              <div class="field-label"><span>Expression Adjustments</span><span>JSON</span></div>
+              <textarea id="detailExpressions" class="input" rows="6" spellcheck="false">[
+  { "name": "happy", "weight": 0.4 },
+  { "name": "neutral", "weight": 0.6 }
+]</textarea>
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Expression Actions</span><span>JSON</span></div>
+              <div class="filter-row">
+                <button class="mini-button" id="applyExpressions" type="button">Apply JSON</button>
+                <button class="mini-button" id="resetExpressions" type="button">Reset JSON</button>
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Finger Adjustments</span><span>JSON</span></div>
+              <textarea id="detailFingerAdjustments" class="input" rows="6" spellcheck="false">[
+  { "hand": "right", "pose": "open", "weight": 0.8 },
+  { "hand": "left", "pose": "open", "weight": 0.8 }
+]</textarea>
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Finger Actions</span><span>JSON</span></div>
+              <div class="filter-row">
+                <button class="mini-button" id="applyFingerAdjustments" type="button">Apply JSON</button>
+                <button class="mini-button" id="resetFingerAdjustments" type="button">Reset JSON</button>
+              </div>
+            </div>
+            <div class="field">
               <div class="field-label"><span>Reference</span><span>Example</span></div>
               <pre class="snippet" id="codeSnippet">motionCatalog.get("vrm_idle_default")</pre>
             </div>

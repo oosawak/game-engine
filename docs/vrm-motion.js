@@ -3,12 +3,12 @@ const MANIFEST_SOURCES = ["./shared-assets.json", "./vrm-editor-data.json"];
 const DEFAULT_TAGS = ["", "idle", "loop", "locomotion", "movement", "gesture", "emote", "default", "safe", "once", "reaction", "combat", "pose"];
 
 const DEFAULT_MOTIONS = [
-  { id: "vrm_idle_default", alias: "待機", scriptName: "vrm_idle_default", displayName: "Idle / Wait", source: "motions/idle.vrma", tags: ["idle", "loop", "default", "safe"], priority: 10, loop: true, duration: "00:12", boneRotations: [{ bone: "hips", rotation: [0, 0, 0] }, { bone: "spine", rotation: [0, 0, 0] }] },
-  { id: "motion_walk_normal", alias: "歩き", scriptName: "motion_walk_normal", displayName: "Walk", source: "motions/walk.glb", tags: ["loop", "locomotion", "movement"], priority: 30, loop: true, duration: "00:08", boneRotations: [{ bone: "hips", rotation: [0, 4, 0] }] },
-  { id: "motion_run_fast", alias: "走り", scriptName: "motion_run_fast", displayName: "Run", source: "motions/run.glb", tags: ["loop", "locomotion", "movement"], priority: 35, loop: true, duration: "00:06", boneRotations: [{ bone: "hips", rotation: [0, 8, 0] }] },
-  { id: "motion_bow_polite", alias: "おじぎ", scriptName: "motion_bow_polite", displayName: "Bow", source: "motions/bow.vrma", tags: ["gesture", "once", "pose"], priority: 50, loop: false, duration: "00:03", boneRotations: [{ bone: "spine", rotation: [18, 0, 0] }] },
-  { id: "motion_wave_right", alias: "挨拶", scriptName: "motion_wave_right", displayName: "Wave", source: "motions/wave.vrma", tags: ["emote", "once", "reaction"], priority: 45, loop: false, duration: "00:04", boneRotations: [{ bone: "rightUpperArm", rotation: [0, 0, 42] }] },
-  { id: "motion_attack_light", alias: "攻撃", scriptName: "motion_attack_light", displayName: "Attack", source: "motions/attack.glb", tags: ["combat", "once", "reaction"], priority: 70, loop: false, duration: "00:05", boneRotations: [{ bone: "rightUpperArm", rotation: [0, 0, 55] }, { bone: "spine", rotation: [10, 0, 0] }] },
+  { id: "vrm_idle_default", alias: "待機", scriptName: "vrm_idle_default", displayName: "Idle / Wait", source: "motions/idle.vrma", tags: ["idle", "loop", "default", "safe"], priority: 10, loop: true, duration: "00:12", boneRotations: [{ bone: "hips", rotation: [0, 0, 0] }, { bone: "spine", rotation: [0, 0, 0] }], expressionAdjustments: [{ name: "neutral", weight: 0.8 }, { name: "happy", weight: 0.2 }], fingerAdjustments: [{ hand: "left", pose: "relaxed", weight: 0.6 }, { hand: "right", pose: "relaxed", weight: 0.6 }] },
+  { id: "motion_walk_normal", alias: "歩き", scriptName: "motion_walk_normal", displayName: "Walk", source: "motions/walk.glb", tags: ["loop", "locomotion", "movement"], priority: 30, loop: true, duration: "00:08", boneRotations: [{ bone: "hips", rotation: [0, 4, 0] }], expressionAdjustments: [{ name: "neutral", weight: 1 }], fingerAdjustments: [{ hand: "left", pose: "open", weight: 0.4 }, { hand: "right", pose: "open", weight: 0.4 }] },
+  { id: "motion_run_fast", alias: "走り", scriptName: "motion_run_fast", displayName: "Run", source: "motions/run.glb", tags: ["loop", "locomotion", "movement"], priority: 35, loop: true, duration: "00:06", boneRotations: [{ bone: "hips", rotation: [0, 8, 0] }], expressionAdjustments: [{ name: "focused", weight: 0.9 }], fingerAdjustments: [{ hand: "left", pose: "closed", weight: 0.5 }, { hand: "right", pose: "closed", weight: 0.5 }] },
+  { id: "motion_bow_polite", alias: "おじぎ", scriptName: "motion_bow_polite", displayName: "Bow", source: "motions/bow.vrma", tags: ["gesture", "once", "pose"], priority: 50, loop: false, duration: "00:03", boneRotations: [{ bone: "spine", rotation: [18, 0, 0] }], expressionAdjustments: [{ name: "respectful", weight: 1 }], fingerAdjustments: [{ hand: "left", pose: "open", weight: 0.9 }, { hand: "right", pose: "open", weight: 0.9 }] },
+  { id: "motion_wave_right", alias: "挨拶", scriptName: "motion_wave_right", displayName: "Wave", source: "motions/wave.vrma", tags: ["emote", "once", "reaction"], priority: 45, loop: false, duration: "00:04", boneRotations: [{ bone: "rightUpperArm", rotation: [0, 0, 42] }], expressionAdjustments: [{ name: "happy", weight: 1 }], fingerAdjustments: [{ hand: "left", pose: "open", weight: 0.7 }, { hand: "right", pose: "wave", weight: 1 }] },
+  { id: "motion_attack_light", alias: "攻撃", scriptName: "motion_attack_light", displayName: "Attack", source: "motions/attack.glb", tags: ["combat", "once", "reaction"], priority: 70, loop: false, duration: "00:05", boneRotations: [{ bone: "rightUpperArm", rotation: [0, 0, 55] }, { bone: "spine", rotation: [10, 0, 0] }], expressionAdjustments: [{ name: "angry", weight: 0.9 }], fingerAdjustments: [{ hand: "left", pose: "grip", weight: 1 }, { hand: "right", pose: "grip", weight: 1 }] },
 ];
 
 const state = {
@@ -37,6 +37,8 @@ function cloneMotionList(list) {
     ...motion,
     tags: [...(motion.tags ?? [])],
     boneRotations: cloneBoneRotations(motion.boneRotations),
+    expressionAdjustments: cloneExpressionAdjustments(motion.expressionAdjustments),
+    fingerAdjustments: cloneFingerAdjustments(motion.fingerAdjustments),
   }));
 }
 
@@ -49,6 +51,8 @@ function cloneMotion(motion) {
     ...motion,
     tags: [...(motion.tags ?? [])],
     boneRotations: cloneBoneRotations(motion.boneRotations),
+    expressionAdjustments: cloneExpressionAdjustments(motion.expressionAdjustments),
+    fingerAdjustments: cloneFingerAdjustments(motion.fingerAdjustments),
   };
 }
 
@@ -77,6 +81,43 @@ function normalizeRotationArray(value) {
   });
 }
 
+function cloneExpressionAdjustments(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => ({
+      name: typeof entry.name === "string" ? entry.name : "",
+      weight: normalizeWeight(entry.weight),
+    }))
+    .filter((entry) => entry.name.trim().length > 0);
+}
+
+function cloneFingerAdjustments(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => ({
+      hand: typeof entry.hand === "string" ? entry.hand : "",
+      pose: typeof entry.pose === "string" ? entry.pose : "",
+      weight: normalizeWeight(entry.weight),
+    }))
+    .filter((entry) => entry.hand.trim().length > 0 || entry.pose.trim().length > 0);
+}
+
+function normalizeWeight(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, number));
+}
+
 function normalize(value) {
   return value.trim().toLowerCase();
 }
@@ -100,8 +141,23 @@ function normalizeMotion(raw, index) {
   const loop = Boolean(raw.loop);
   const duration = typeof raw.duration === "string" && raw.duration.trim() ? raw.duration.trim() : "00:00";
   const boneRotations = normalizeBoneRotations(raw.boneRotations);
+  const expressionAdjustments = normalizeExpressionAdjustments(raw.expressionAdjustments);
+  const fingerAdjustments = normalizeFingerAdjustments(raw.fingerAdjustments);
 
-  return { id, alias, scriptName, displayName, source, tags: [...tagsValue], priority, loop, duration, boneRotations };
+  return {
+    id,
+    alias,
+    scriptName,
+    displayName,
+    source,
+    tags: [...tagsValue],
+    priority,
+    loop,
+    duration,
+    boneRotations,
+    expressionAdjustments,
+    fingerAdjustments,
+  };
 }
 
 function extractMotionEntries(rawData) {
@@ -160,6 +216,30 @@ function normalizeBoneRotations(value) {
   return cloneBoneRotations(value);
 }
 
+function normalizeExpressionAdjustments(value) {
+  if (typeof value === "string") {
+    try {
+      return cloneExpressionAdjustments(JSON.parse(value));
+    } catch (error) {
+      return [];
+    }
+  }
+
+  return cloneExpressionAdjustments(value);
+}
+
+function normalizeFingerAdjustments(value) {
+  if (typeof value === "string") {
+    try {
+      return cloneFingerAdjustments(JSON.parse(value));
+    } catch (error) {
+      return [];
+    }
+  }
+
+  return cloneFingerAdjustments(value);
+}
+
 function uniqueTags(list, providedTags = []) {
   const set = new Set([""]);
   for (const tag of providedTags) {
@@ -213,6 +293,8 @@ function applyMotionSnapshot(target, snapshot) {
   target.loop = snapshot.loop;
   target.duration = snapshot.duration;
   target.boneRotations = cloneBoneRotations(snapshot.boneRotations);
+  target.expressionAdjustments = cloneExpressionAdjustments(snapshot.expressionAdjustments);
+  target.fingerAdjustments = cloneFingerAdjustments(snapshot.fingerAdjustments);
 }
 
 function resetSelectedMotion() {
@@ -252,6 +334,14 @@ function serializeBoneRotations(rotations) {
   return JSON.stringify(cloneBoneRotations(rotations), null, 2);
 }
 
+function serializeExpressionAdjustments(adjustments) {
+  return JSON.stringify(cloneExpressionAdjustments(adjustments), null, 2);
+}
+
+function serializeFingerAdjustments(adjustments) {
+  return JSON.stringify(cloneFingerAdjustments(adjustments), null, 2);
+}
+
 function loadBoneRotationsFromTextarea() {
   const motion = getSelectedMotion();
   if (!motion || !refs.detailBoneRotations) {
@@ -276,6 +366,60 @@ function resetBoneRotations() {
   }
 
   motion.boneRotations = cloneBoneRotations(snapshot.boneRotations);
+  render();
+}
+
+function loadExpressionsFromTextarea() {
+  const motion = getSelectedMotion();
+  if (!motion || !refs.detailExpressions) {
+    return;
+  }
+
+  try {
+    motion.expressionAdjustments = normalizeExpressionAdjustments(refs.detailExpressions.value);
+    state.error = "";
+    render();
+  } catch (error) {
+    state.error = "Expression JSON could not be parsed.";
+    render();
+  }
+}
+
+function resetExpressions() {
+  const motion = getSelectedMotion();
+  const snapshot = motion ? getBaseMotion(motion.id) : null;
+  if (!motion || !snapshot) {
+    return;
+  }
+
+  motion.expressionAdjustments = cloneExpressionAdjustments(snapshot.expressionAdjustments);
+  render();
+}
+
+function loadFingerAdjustmentsFromTextarea() {
+  const motion = getSelectedMotion();
+  if (!motion || !refs.detailFingerAdjustments) {
+    return;
+  }
+
+  try {
+    motion.fingerAdjustments = normalizeFingerAdjustments(refs.detailFingerAdjustments.value);
+    state.error = "";
+    render();
+  } catch (error) {
+    state.error = "Finger JSON could not be parsed.";
+    render();
+  }
+}
+
+function resetFingerAdjustments() {
+  const motion = getSelectedMotion();
+  const snapshot = motion ? getBaseMotion(motion.id) : null;
+  if (!motion || !snapshot) {
+    return;
+  }
+
+  motion.fingerAdjustments = cloneFingerAdjustments(snapshot.fingerAdjustments);
   render();
 }
 
@@ -366,6 +510,12 @@ function renderDetails() {
   refs.detailDuration.textContent = motion.duration;
   if (refs.detailBoneRotations) {
     refs.detailBoneRotations.value = serializeBoneRotations(motion.boneRotations);
+  }
+  if (refs.detailExpressions) {
+    refs.detailExpressions.value = serializeExpressionAdjustments(motion.expressionAdjustments);
+  }
+  if (refs.detailFingerAdjustments) {
+    refs.detailFingerAdjustments.value = serializeFingerAdjustments(motion.fingerAdjustments);
   }
   refs.detailTagRow.innerHTML = motion.tags.map((tag) => `<span class="mini-chip">${tag}</span>`).join("");
   refs.footerSummary.textContent = `${motion.displayName} / ${motion.scriptName}`;
@@ -492,6 +642,12 @@ async function init() {
   refs.detailTags = document.getElementById("detailTags");
   refs.applyBoneRotations = document.getElementById("applyBoneRotations");
   refs.resetBoneRotations = document.getElementById("resetBoneRotations");
+  refs.detailExpressions = document.getElementById("detailExpressions");
+  refs.detailFingerAdjustments = document.getElementById("detailFingerAdjustments");
+  refs.applyExpressions = document.getElementById("applyExpressions");
+  refs.resetExpressions = document.getElementById("resetExpressions");
+  refs.applyFingerAdjustments = document.getElementById("applyFingerAdjustments");
+  refs.resetFingerAdjustments = document.getElementById("resetFingerAdjustments");
   refs.detailSource = document.getElementById("detailSource");
   refs.detailPriority = document.getElementById("detailPriority");
   refs.detailLoop = document.getElementById("detailLoop");
@@ -556,6 +712,22 @@ async function init() {
     resetBoneRotations();
   });
 
+  refs.applyExpressions.addEventListener("click", () => {
+    loadExpressionsFromTextarea();
+  });
+
+  refs.resetExpressions.addEventListener("click", () => {
+    resetExpressions();
+  });
+
+  refs.applyFingerAdjustments.addEventListener("click", () => {
+    loadFingerAdjustmentsFromTextarea();
+  });
+
+  refs.resetFingerAdjustments.addEventListener("click", () => {
+    resetFingerAdjustments();
+  });
+
   bindInput(refs.detailScriptName, (motion, value) => { motion.scriptName = value || motion.id; });
   bindInput(refs.detailAlias, (motion, value) => { motion.alias = value; });
   bindInput(refs.detailDisplayName, (motion, value) => { motion.displayName = value; });
@@ -571,6 +743,12 @@ async function init() {
     motion.loop = value === "true" || value === "1" || value === "yes";
   });
   refs.detailBoneRotations.addEventListener("input", () => {
+    state.saveStatus = "Unsaved";
+  });
+  refs.detailExpressions.addEventListener("input", () => {
+    state.saveStatus = "Unsaved";
+  });
+  refs.detailFingerAdjustments.addEventListener("input", () => {
     state.saveStatus = "Unsaved";
   });
 
