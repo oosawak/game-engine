@@ -1,6 +1,6 @@
 import { CameraComponent } from "../component/CameraComponent.js";
-import { LightComponent } from "../component/LightComponent.js";
 import { GameObject } from "../object/GameObject.js";
+import { collectSceneRenderState } from "../rendering/SceneRenderState.js";
 import type { RenderContext } from "../rendering/RenderContext.js";
 
 export class Scene {
@@ -85,29 +85,18 @@ export class Scene {
       return;
     }
 
-    const cameraObject = this.getActiveCameraObject();
-    const camera = cameraObject?.getComponent(CameraComponent) ?? null;
-    if (!cameraObject || !camera) {
+    const sceneRenderState = collectSceneRenderState(this);
+    if (!sceneRenderState) {
       return;
     }
 
-    const lights = [...this.objects.values()]
-      .filter((gameObject) => gameObject.isActive && !gameObject.isDestroyed)
-      .map((gameObject) => gameObject.getComponent(LightComponent))
-      .filter((light): light is LightComponent => light !== null);
-
-    const renderContext: RenderContext = {
-      scene: this,
-      cameraObject,
-      camera,
-      lights,
-      activeObject: null,
-      deltaTime,
-      frame,
-    };
-
     for (const gameObject of this.objects.values()) {
-      gameObject.render({ ...renderContext, activeObject: gameObject });
+      gameObject.render({
+        ...sceneRenderState,
+        activeObject: gameObject,
+        deltaTime,
+        frame,
+      } satisfies RenderContext);
     }
   }
 

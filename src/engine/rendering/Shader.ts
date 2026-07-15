@@ -9,4 +9,8 @@ export class Shader {
     public readonly name: string,
     public readonly source: ShaderSource,
   ) {}
+
+  public isComplete(): boolean {
+    return this.source.vertex.trim().length > 0 && this.source.fragment.trim().length > 0;
+  }
 }

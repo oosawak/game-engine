@@ -15,6 +15,9 @@ describe("Rendering primitives", () => {
 
     expect(mesh.id).toBe("mesh-1");
     expect(mesh.attributes).toHaveLength(1);
+    expect(mesh.getAttribute("position")).not.toBeNull();
+    expect(mesh.hasAttribute("position")).toBe(true);
+    expect(mesh.getIndexCount()).toBe(0);
   });
 
   it("stores material and shader metadata", () => {
@@ -28,7 +31,10 @@ describe("Rendering primitives", () => {
     });
 
     expect(shader.source.vertex).toContain("main");
+    expect(shader.isComplete()).toBe(true);
     expect(material.shaderId).toBe(shader.id);
     expect(material.uniforms.color).toBe("#ffffff");
+    expect(material.getUniform("roughness")).toBe(0.5);
+    expect(material.hasUniform("color")).toBe(true);
   });
 });

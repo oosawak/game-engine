@@ -9,4 +9,14 @@ export class Material {
     public readonly shaderId: string,
     public readonly uniforms: MaterialUniforms = {},
   ) {}
+
+  public getUniform(name: string): number | boolean | string | readonly number[] | null {
+    return Object.prototype.hasOwnProperty.call(this.uniforms, name)
+      ? this.uniforms[name]
+      : null;
+  }
+
+  public hasUniform(name: string): boolean {
+    return this.getUniform(name) !== null;
+  }
 }

@@ -7,6 +7,7 @@ import { CameraComponent } from "../src/engine/component/CameraComponent.js";
 import { LightComponent } from "../src/engine/component/LightComponent.js";
 import { RendererComponent } from "../src/engine/rendering/RendererComponent.js";
 import type { RenderContext } from "../src/engine/rendering/RenderContext.js";
+import { collectSceneRenderState } from "../src/engine/rendering/SceneRenderState.js";
 
 describe("Scene system", () => {
   it("switches scenes and updates active objects", () => {
@@ -68,5 +69,24 @@ describe("Scene system", () => {
     expect(calls[0].camera).toBeInstanceOf(CameraComponent);
     expect(calls[0].lights).toHaveLength(1);
     expect(calls[0].activeObject).toBe(cube);
+  });
+
+  it("collects render state outside of scene logic", () => {
+    const scene = new Scene("Collect");
+    const camera = new GameObject("Camera");
+    camera.addComponent(new CameraComponent());
+    const light = new GameObject("Light");
+    light.addComponent(new LightComponent());
+
+    scene.addObject(camera);
+    scene.addObject(light);
+    scene.enter();
+
+    const state = collectSceneRenderState(scene);
+
+    expect(state?.scene).toBe(scene);
+    expect(state?.cameraObject).toBe(camera);
+    expect(state?.camera).toBeInstanceOf(CameraComponent);
+    expect(state?.lights).toHaveLength(1);
   });
 });
