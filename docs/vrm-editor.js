@@ -61,11 +61,13 @@ const state = {
   playing: "Loading...",
   loading: true,
   error: "",
+  saveStatus: "Unsaved",
 };
 
 const refs = {};
 let motions = cloneMotionList(DEFAULT_MOTIONS);
 let tags = [...DEFAULT_TAGS];
+const STORAGE_KEY = "game-engine.vrm-editor.v1";
 
 function cloneMotionList(list) {
   return list.map((motion) => ({
@@ -140,6 +142,71 @@ function applyMotionData(rawData) {
 
   if (!state.playing || state.playing === "Loading...") {
     state.playing = motions[0]?.displayName ?? "Stopped";
+  }
+}
+
+function serializeState() {
+  return {
+    motions: cloneMotionList(motions),
+    ui: {
+      selectedId: state.selectedId,
+      search: state.search,
+      tag: state.tag,
+      playing: state.playing,
+    },
+  };
+}
+
+function persistState(label = "Saved locally") {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+    state.saveStatus = label;
+  } catch (error) {
+    state.saveStatus = "Save failed";
+    state.error = "Failed to write local save data.";
+  }
+  render();
+}
+
+function hydrateState(snapshot) {
+  const loadedMotions = Array.isArray(snapshot?.motions)
+    ? snapshot.motions.map(normalizeMotion).filter(Boolean)
+    : [];
+  const ui = snapshot?.ui ?? {};
+
+  applyMotionData({
+    motions: loadedMotions.length ? loadedMotions : DEFAULT_MOTIONS,
+    tags: snapshot?.tags,
+  });
+
+  state.selectedId = typeof ui.selectedId === "string" ? ui.selectedId : state.selectedId;
+  state.search = typeof ui.search === "string" ? ui.search : state.search;
+  state.tag = typeof ui.tag === "string" ? ui.tag : state.tag;
+  state.playing = typeof ui.playing === "string" ? ui.playing : state.playing;
+
+  if (!motions.some((motion) => motion.id === state.selectedId)) {
+    state.selectedId = motions[0]?.id ?? "";
+  }
+}
+
+function restoreSavedState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+
+    if (!raw) {
+      state.saveStatus = "No local save";
+      return false;
+    }
+
+    const snapshot = JSON.parse(raw);
+    hydrateState(snapshot);
+    state.saveStatus = "Loaded from local save";
+    state.error = "";
+    return true;
+  } catch (error) {
+    state.saveStatus = "Load failed";
+    state.error = "Failed to read local save data.";
+    return false;
   }
 }
 
@@ -248,6 +315,7 @@ function renderDetails() {
     refs.playingLabel.textContent = "Playing: Stopped";
     refs.timelineProgress.style.width = "0%";
     refs.footerSummary.textContent = "No motion data";
+    refs.saveStatus.textContent = state.saveStatus;
     return;
   }
 
@@ -265,6 +333,7 @@ function renderDetails() {
   refs.footerSummary.textContent = state.error
     ? `${motion.displayName} / ${motion.id} · fallback data`
     : `${motion.displayName} / ${motion.id}`;
+  refs.saveStatus.textContent = state.saveStatus;
 }
 
 function bindDetailInput(input, updater) {
@@ -329,7 +398,10 @@ function init() {
   refs.playButton = document.getElementById("playButton");
   refs.stopButton = document.getElementById("stopButton");
   refs.loopButton = document.getElementById("loopButton");
+  refs.saveButton = document.getElementById("saveButton");
+  refs.loadButton = document.getElementById("loadButton");
   refs.seekLabel = document.getElementById("seekLabel");
+  refs.saveStatus = document.getElementById("saveStatus");
   refs.tabButtons = [...document.querySelectorAll(".tab")];
 
   refs.motionSearch.addEventListener("input", () => {
@@ -357,6 +429,21 @@ function init() {
       return;
     }
     motion.loop = !motion.loop;
+    render();
+  });
+
+  refs.saveButton.addEventListener("click", () => {
+    persistState("Saved locally");
+  });
+
+  refs.loadButton.addEventListener("click", () => {
+    const restored = restoreSavedState();
+
+    if (!restored) {
+      render();
+      return;
+    }
+
     render();
   });
 
@@ -388,7 +475,12 @@ function init() {
   });
 
   render();
-  loadMotionManifest();
+  if (!restoreSavedState()) {
+    loadMotionManifest();
+  } else {
+    state.loading = false;
+    render();
+  }
 }
 
 window.addEventListener("DOMContentLoaded", init);
