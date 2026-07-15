@@ -107,6 +107,9 @@ function normalizeMotion(raw, index) {
 
   const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : `motion_${index + 1}`;
   const alias = typeof raw.alias === "string" ? raw.alias : "";
+  const scriptName = typeof raw.scriptName === "string" && raw.scriptName.trim()
+    ? raw.scriptName.trim()
+    : id;
   const displayName = typeof raw.displayName === "string" && raw.displayName.trim()
     ? raw.displayName.trim()
     : alias || id;
@@ -119,6 +122,7 @@ function normalizeMotion(raw, index) {
   return {
     id,
     alias,
+    scriptName,
     displayName,
     source,
     tags: [...tagsValue],
@@ -210,6 +214,11 @@ function restoreSavedState() {
   }
 }
 
+function findMotionFromQuery() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("motion") ?? "";
+}
+
 function getSelectedMotion() {
   return motions.find((motion) => motion.id === state.selectedId) ?? motions[0] ?? null;
 }
@@ -292,8 +301,7 @@ function renderMotionList() {
       render();
     });
     card.addEventListener("dblclick", () => {
-      state.playing = motion.displayName;
-      render();
+      window.location.href = `./vrm-motion.html?motion=${encodeURIComponent(motion.id)}`;
     });
     refs.motionList.appendChild(card);
   }
@@ -369,6 +377,11 @@ async function loadMotionManifest() {
     state.error = "Motion manifest could not be loaded. Using fallback data.";
   } finally {
     state.loading = false;
+
+    const targetId = findMotionFromQuery();
+    if (targetId && motions.some((motion) => motion.id === targetId)) {
+      state.selectedId = targetId;
+    }
 
     if (!state.selectedId && motions[0]) {
       state.selectedId = motions[0].id;
@@ -479,6 +492,10 @@ function init() {
     loadMotionManifest();
   } else {
     state.loading = false;
+    const targetId = findMotionFromQuery();
+    if (targetId && motions.some((motion) => motion.id === targetId)) {
+      state.selectedId = targetId;
+    }
     render();
   }
 }
