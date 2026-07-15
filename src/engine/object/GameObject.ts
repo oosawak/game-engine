@@ -1,5 +1,6 @@
 import { Component, attachComponentOwner } from "../component/Component.js";
 import { Transform } from "../component/Transform.js";
+import type { RenderContext } from "../rendering/RenderContext.js";
 
 let nextGameObjectId = 1;
 
@@ -146,17 +147,17 @@ export class GameObject {
     }
   }
 
-  public render(): void {
+  public render(context?: RenderContext): void {
     if (!this.active || this.destroyed) {
       return;
     }
 
     for (const component of this.components) {
-      component.internalRender();
+      component.internalRender(context);
     }
 
     for (const child of this.children) {
-      child.render();
+      child.render(context);
     }
   }
 

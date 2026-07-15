@@ -48,8 +48,9 @@ export class Engine {
 
   public tick(timestamp: number): number {
     const deltaTime = this.time.update(timestamp);
+    const frame = this.time.getFrameCount();
     this.sceneManager.update(deltaTime);
-    this.sceneManager.render();
+    this.sceneManager.render(deltaTime, frame);
     return deltaTime;
   }
 

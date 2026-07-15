@@ -3,6 +3,7 @@ import { RendererComponent } from "../src/engine/rendering/RendererComponent.js"
 import type { RenderContext } from "../src/engine/rendering/RenderContext.js";
 import type { Renderer } from "../src/engine/rendering/Renderer.js";
 import { GameObject } from "../src/engine/object/GameObject.js";
+import { CameraComponent } from "../src/engine/component/CameraComponent.js";
 import { Scene } from "../src/engine/scene/Scene.js";
 
 describe("Rendering boundary", () => {
@@ -16,6 +17,9 @@ describe("Rendering boundary", () => {
 
     const context: RenderContext = {
       scene: new Scene("Main"),
+      cameraObject: new GameObject("Camera"),
+      camera: new CameraComponent(),
+      lights: [],
       activeObject: null,
       deltaTime: 0.016,
       frame: 1,

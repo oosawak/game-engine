@@ -1,4 +1,5 @@
 import type { GameObject } from "../object/GameObject.js";
+import type { RenderContext } from "../rendering/RenderContext.js";
 
 const componentOwners = new WeakMap<Component, GameObject | null>();
 
@@ -37,12 +38,12 @@ export abstract class Component {
     this.update(deltaTime);
   }
 
-  public internalRender(): void {
+  public internalRender(context?: RenderContext): void {
     if (!this.enabled || !this._started || this._destroyed) {
       return;
     }
 
-    this.render();
+    this.render(context);
   }
 
   public internalDestroy(): void {
@@ -58,7 +59,7 @@ export abstract class Component {
 
   protected update(_deltaTime: number): void {}
 
-  protected render(): void {}
+  protected render(_context?: RenderContext): void {}
 
   protected destroy(): void {}
 }

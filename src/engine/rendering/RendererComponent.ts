@@ -28,11 +28,13 @@ export class RendererComponent extends Component {
     return this.context;
   }
 
-  protected override render(): void {
-    if (!this.renderer || !this.context) {
+  protected override render(context?: RenderContext): void {
+    const renderContext = context ?? this.context;
+
+    if (!this.renderer || !renderContext) {
       return;
     }
 
-    this.renderer.render(this.context);
+    this.renderer.render(renderContext);
   }
 }

@@ -3,6 +3,10 @@ import { Engine } from "../src/engine/core/Engine.js";
 import { Scene } from "../src/engine/scene/Scene.js";
 import { SceneManager } from "../src/engine/scene/SceneManager.js";
 import { GameObject } from "../src/engine/object/GameObject.js";
+import { CameraComponent } from "../src/engine/component/CameraComponent.js";
+import { LightComponent } from "../src/engine/component/LightComponent.js";
+import { RendererComponent } from "../src/engine/rendering/RendererComponent.js";
+import type { RenderContext } from "../src/engine/rendering/RenderContext.js";
 
 describe("Scene system", () => {
   it("switches scenes and updates active objects", () => {
@@ -33,5 +37,36 @@ describe("Scene system", () => {
     engine.getSceneManager().changeScene("Main");
 
     expect(engine.tick(1000)).toBeGreaterThanOrEqual(0);
+  });
+
+  it("renders through an active camera and exposes lights in the context", () => {
+    const scene = new Scene("RenderScene");
+    const calls: RenderContext[] = [];
+
+    const camera = new GameObject("Camera");
+    camera.addComponent(new CameraComponent());
+
+    const light = new GameObject("Light");
+    light.addComponent(new LightComponent({ intensity: 2 }));
+
+    const cube = new GameObject("Cube");
+    cube.addComponent(new RendererComponent({
+      render: (context) => {
+        calls.push(context);
+      },
+    }));
+
+    scene.addObject(camera);
+    scene.addObject(light);
+    scene.addObject(cube);
+    scene.enter();
+    scene.render(0.016, 3);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].scene).toBe(scene);
+    expect(calls[0].cameraObject).toBe(camera);
+    expect(calls[0].camera).toBeInstanceOf(CameraComponent);
+    expect(calls[0].lights).toHaveLength(1);
+    expect(calls[0].activeObject).toBe(cube);
   });
 });

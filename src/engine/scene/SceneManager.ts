@@ -43,8 +43,8 @@ export class SceneManager {
     this.currentScene?.update(deltaTime);
   }
 
-  public render(): void {
-    this.currentScene?.render();
+  public render(deltaTime = 0, frame = 0): void {
+    this.currentScene?.render(deltaTime, frame);
   }
 
   public getCurrentScene(): Scene | null {
