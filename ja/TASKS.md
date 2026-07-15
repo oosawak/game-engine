@@ -155,11 +155,11 @@
 
 ## Phase 15: VRM Pose Editor
 
-- [ ] VRM 用のポーズ編集画面を別画面として定義する
-- [ ] VRM Editor の 3 ペイン構成を定義する
-- [ ] VRM Editor の左ペインにモーション一覧を表示する
-- [ ] VRM Editor の中央ペインにプレビューと再生制御を表示する
-- [ ] VRM Editor の右ペインに名前編集と詳細設定を表示する
+- [x] VRM 用のポーズ編集は VRM Editor の中に統合する
+- [x] VRM Editor の 3 ペイン構成を定義する
+- [x] VRM Editor の左ペインにモーション一覧を表示する
+- [x] VRM Editor の中央ペインにプレビューと再生制御を表示する
+- [x] VRM Editor の右ペインに名前編集と詳細設定を表示する
 - [ ] 標準ポーズを `Idle / Wait` として定義する
 - [ ] `Reset Pose` を実装する
 - [ ] `Preset Pose` の選択を実装する
@@ -170,6 +170,7 @@
 - [ ] 表情や手指の調整を拡張項目として追加する
 - [ ] `Scene View` で VRM の見た目を確認できるようにする
 - [ ] VRM 本体とポーズデータを分離して管理する
+- [ ] モーション詳細は VRM Editor の右ペインで編集できるようにする
 
 ## Phase 16: Mint MCP Integration
 
