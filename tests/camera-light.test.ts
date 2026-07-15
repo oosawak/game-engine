@@ -7,6 +7,7 @@ describe("Camera and light components", () => {
   it("stores camera view settings and follow target", () => {
     const cameraObject = new GameObject("Camera");
     const target = new GameObject("Target");
+    target.transform.setPosition(10, 20, 30);
     const camera = new CameraComponent({
       fieldOfView: 75,
       near: 0.5,
@@ -16,6 +17,9 @@ describe("Camera and light components", () => {
     });
 
     cameraObject.addComponent(camera);
+    camera.setFollowOffset(1, 2, 3);
+    cameraObject.activate();
+    cameraObject.update(0.016);
 
     expect(camera.getProjection()).toBe("perspective");
     expect(camera.getFieldOfView()).toBe(75);
@@ -23,6 +27,7 @@ describe("Camera and light components", () => {
     expect(camera.getFar()).toBe(500);
     expect(camera.getZoom()).toBe(2);
     expect(camera.getFollowTarget()).toBe(target);
+    expect(cameraObject.transform.position).toEqual(expect.objectContaining({ x: 11, y: 22, z: 33 }));
 
     camera.setProjection("orthographic");
     camera.clearFollowTarget();

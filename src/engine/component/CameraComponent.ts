@@ -1,4 +1,5 @@
 import { Component } from "./Component.js";
+import { Vector3 } from "../math/Vector3.js";
 import type { GameObject } from "../object/GameObject.js";
 
 export type CameraProjection = "perspective" | "orthographic";
@@ -10,6 +11,7 @@ export class CameraComponent extends Component {
   private far: number;
   private zoom: number;
   private followTarget: GameObject | null;
+  private readonly followOffset = new Vector3(0, 0, 0);
 
   public constructor(options: {
     projection?: CameraProjection;
@@ -78,5 +80,24 @@ export class CameraComponent extends Component {
 
   public clearFollowTarget(): void {
     this.followTarget = null;
+  }
+
+  public getFollowOffset(): Vector3 {
+    return this.followOffset;
+  }
+
+  public setFollowOffset(x: number, y: number, z: number): void {
+    this.followOffset.set(x, y, z);
+  }
+
+  protected override update(): void {
+    const owner = this.owner;
+    const target = this.followTarget;
+
+    if (!owner || !target) {
+      return;
+    }
+
+    owner.transform.position.copy(target.transform.position).add(this.followOffset);
   }
 }
