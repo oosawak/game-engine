@@ -1,0 +1,78 @@
+{
+  "tags": [
+    "",
+    "idle",
+    "loop",
+    "locomotion",
+    "gesture",
+    "emote",
+    "default",
+    "safe",
+    "once",
+    "reaction",
+    "combat",
+    "pose"
+  ],
+  "motions": [
+    {
+      "id": "vrm_idle_default",
+      "alias": "待機",
+      "displayName": "Idle / Wait",
+      "source": "motions/idle.vrma",
+      "tags": ["idle", "loop", "default", "safe"],
+      "priority": 10,
+      "loop": true,
+      "duration": "00:12"
+    },
+    {
+      "id": "motion_walk_normal",
+      "alias": "歩き",
+      "displayName": "Walk",
+      "source": "motions/walk.glb",
+      "tags": ["loop", "locomotion", "movement"],
+      "priority": 30,
+      "loop": true,
+      "duration": "00:08"
+    },
+    {
+      "id": "motion_run_fast",
+      "alias": "走り",
+      "displayName": "Run",
+      "source": "motions/run.glb",
+      "tags": ["loop", "locomotion", "movement"],
+      "priority": 35,
+      "loop": true,
+      "duration": "00:06"
+    },
+    {
+      "id": "motion_bow_polite",
+      "alias": "おじぎ",
+      "displayName": "Bow",
+      "source": "motions/bow.vrma",
+      "tags": ["gesture", "once", "pose"],
+      "priority": 50,
+      "loop": false,
+      "duration": "00:03"
+    },
+    {
+      "id": "motion_wave_right",
+      "alias": "挨拶",
+      "displayName": "Wave",
+      "source": "motions/wave.vrma",
+      "tags": ["emote", "once", "reaction"],
+      "priority": 45,
+      "loop": false,
+      "duration": "00:04"
+    },
+    {
+      "id": "motion_attack_light",
+      "alias": "攻撃",
+      "displayName": "Attack",
+      "source": "motions/attack.glb",
+      "tags": ["combat", "once", "reaction"],
+      "priority": 70,
+      "loop": false,
+      "duration": "00:05"
+    }
+  ]
+}

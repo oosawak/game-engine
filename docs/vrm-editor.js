@@ -1,4 +1,4 @@
-const MOTIONS = [
+const DEFAULT_MOTIONS = [
   {
     id: "vrm_idle_default",
     alias: "待機",
@@ -41,37 +41,117 @@ const MOTIONS = [
   },
 ];
 
-const TAGS = ["", "idle", "loop", "locomotion", "gesture", "emote", "default", "safe", "once", "reaction"];
+const DEFAULT_TAGS = [
+  "",
+  "idle",
+  "loop",
+  "locomotion",
+  "gesture",
+  "emote",
+  "default",
+  "safe",
+  "once",
+  "reaction",
+];
 
 const state = {
-  selectedId: MOTIONS[0].id,
+  selectedId: "",
   search: "",
   tag: "",
-  playing: "Idle / Wait",
+  playing: "Loading...",
+  loading: true,
+  error: "",
 };
 
 const refs = {};
+let motions = cloneMotionList(DEFAULT_MOTIONS);
+let tags = [...DEFAULT_TAGS];
 
-function cloneMotion(motion) {
-  return {
+function cloneMotionList(list) {
+  return list.map((motion) => ({
     ...motion,
-    tags: [...motion.tags],
-  };
-}
-
-function getSelectedMotion() {
-  return MOTIONS.find((motion) => motion.id === state.selectedId) ?? MOTIONS[0];
+    tags: [...(motion.tags ?? [])],
+  }));
 }
 
 function normalize(value) {
   return value.trim().toLowerCase();
 }
 
+function uniqueTags(list, providedTags = []) {
+  const set = new Set([""]);
+
+  for (const tag of providedTags) {
+    if (typeof tag === "string") {
+      set.add(tag.trim());
+    }
+  }
+
+  for (const motion of list) {
+    for (const tag of motion.tags ?? []) {
+      if (typeof tag === "string" && tag.trim()) {
+        set.add(tag.trim());
+      }
+    }
+  }
+
+  return [...set];
+}
+
+function normalizeMotion(raw, index) {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : `motion_${index + 1}`;
+  const alias = typeof raw.alias === "string" ? raw.alias : "";
+  const displayName = typeof raw.displayName === "string" && raw.displayName.trim()
+    ? raw.displayName.trim()
+    : alias || id;
+  const source = typeof raw.source === "string" && raw.source.trim() ? raw.source.trim() : "unknown";
+  const tagsValue = Array.isArray(raw.tags) ? raw.tags.filter((tag) => typeof tag === "string" && tag.trim()) : [];
+  const priority = Number.isFinite(Number(raw.priority)) ? Number(raw.priority) : 0;
+  const loop = Boolean(raw.loop);
+  const duration = typeof raw.duration === "string" && raw.duration.trim() ? raw.duration.trim() : "00:00";
+
+  return {
+    id,
+    alias,
+    displayName,
+    source,
+    tags: [...tagsValue],
+    priority,
+    loop,
+    duration,
+  };
+}
+
+function applyMotionData(rawData) {
+  const loadedMotions = Array.isArray(rawData?.motions)
+    ? rawData.motions.map(normalizeMotion).filter(Boolean)
+    : [];
+
+  motions = loadedMotions.length ? loadedMotions : cloneMotionList(DEFAULT_MOTIONS);
+  tags = uniqueTags(motions, Array.isArray(rawData?.tags) ? rawData.tags : DEFAULT_TAGS);
+
+  if (!motions.some((motion) => motion.id === state.selectedId)) {
+    state.selectedId = motions[0]?.id ?? "";
+  }
+
+  if (!state.playing || state.playing === "Loading...") {
+    state.playing = motions[0]?.displayName ?? "Stopped";
+  }
+}
+
+function getSelectedMotion() {
+  return motions.find((motion) => motion.id === state.selectedId) ?? motions[0] ?? null;
+}
+
 function matchesMotion(motion) {
   const query = normalize(state.search);
-  const tag = state.tag;
+  const activeTag = state.tag;
 
-  if (tag && !motion.tags.includes(tag)) {
+  if (activeTag && !motion.tags.includes(activeTag)) {
     return false;
   }
 
@@ -86,7 +166,7 @@ function matchesMotion(motion) {
 function renderTagFilters() {
   refs.tagFilters.innerHTML = "";
 
-  TAGS.forEach((tag) => {
+  for (const tag of tags) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `mini-button${state.tag === tag ? " active" : ""}`;
@@ -96,13 +176,30 @@ function renderTagFilters() {
       render();
     });
     refs.tagFilters.appendChild(button);
-  });
+  }
 }
 
 function renderMotionList() {
-  const filtered = MOTIONS.filter(matchesMotion);
-  refs.motionCount.textContent = `${filtered.length} items`;
+  const filtered = motions.filter(matchesMotion);
   refs.motionList.innerHTML = "";
+
+  if (state.loading) {
+    refs.motionCount.textContent = "Loading...";
+    const loading = document.createElement("div");
+    loading.className = "motion-card";
+    loading.innerHTML = `<div class="motion-subtitle">Loading motion manifest...</div>`;
+    refs.motionList.appendChild(loading);
+    return;
+  }
+
+  refs.motionCount.textContent = `${filtered.length} / ${motions.length} items`;
+
+  if (state.error) {
+    const errorCard = document.createElement("div");
+    errorCard.className = "motion-card";
+    errorCard.innerHTML = `<div class="motion-subtitle">${state.error}</div>`;
+    refs.motionList.appendChild(errorCard);
+  }
 
   if (!filtered.length) {
     const empty = document.createElement("div");
@@ -137,6 +234,23 @@ function renderMotionList() {
 
 function renderDetails() {
   const motion = getSelectedMotion();
+
+  if (!motion) {
+    refs.detailId.textContent = "-";
+    refs.detailAlias.value = "";
+    refs.detailDisplayName.value = "";
+    refs.detailSource.value = "";
+    refs.detailTags.value = "";
+    refs.detailPriority.value = "0";
+    refs.detailLoop.value = "false";
+    refs.overlayId.textContent = "-";
+    refs.overlayAlias.textContent = "(none)";
+    refs.playingLabel.textContent = "Playing: Stopped";
+    refs.timelineProgress.style.width = "0%";
+    refs.footerSummary.textContent = "No motion data";
+    return;
+  }
+
   refs.detailId.textContent = motion.id;
   refs.detailAlias.value = motion.alias;
   refs.detailDisplayName.value = motion.displayName;
@@ -148,12 +262,17 @@ function renderDetails() {
   refs.overlayAlias.textContent = motion.alias || "(none)";
   refs.playingLabel.textContent = `Playing: ${state.playing}`;
   refs.timelineProgress.style.width = motion.loop ? "38%" : "64%";
-  refs.footerSummary.textContent = `${motion.displayName} / ${motion.id}`;
+  refs.footerSummary.textContent = state.error
+    ? `${motion.displayName} / ${motion.id} · fallback data`
+    : `${motion.displayName} / ${motion.id}`;
 }
 
 function bindDetailInput(input, updater) {
   input.addEventListener("input", () => {
     const motion = getSelectedMotion();
+    if (!motion) {
+      return;
+    }
     updater(motion, input.value);
     render();
   });
@@ -163,6 +282,31 @@ function render() {
   renderTagFilters();
   renderMotionList();
   renderDetails();
+}
+
+async function loadMotionManifest() {
+  try {
+    const response = await fetch(new URL("./vrm-editor-data.json", import.meta.url));
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    applyMotionData(data);
+    state.error = "";
+  } catch (error) {
+    applyMotionData(null);
+    state.error = "Motion manifest could not be loaded. Using fallback data.";
+  } finally {
+    state.loading = false;
+
+    if (!state.selectedId && motions[0]) {
+      state.selectedId = motions[0].id;
+    }
+
+    render();
+  }
 }
 
 function init() {
@@ -194,7 +338,11 @@ function init() {
   });
 
   refs.playButton.addEventListener("click", () => {
-    state.playing = getSelectedMotion().displayName;
+    const motion = getSelectedMotion();
+    if (!motion) {
+      return;
+    }
+    state.playing = motion.displayName;
     render();
   });
 
@@ -205,6 +353,9 @@ function init() {
 
   refs.loopButton.addEventListener("click", () => {
     const motion = getSelectedMotion();
+    if (!motion) {
+      return;
+    }
     motion.loop = !motion.loop;
     render();
   });
@@ -237,6 +388,7 @@ function init() {
   });
 
   render();
+  loadMotionManifest();
 }
 
 window.addEventListener("DOMContentLoaded", init);
