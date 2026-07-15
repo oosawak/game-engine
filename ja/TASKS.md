@@ -182,8 +182,8 @@
 - [ ] Collider メタデータの受け取り方を定義する
 - [ ] Streaming 情報の扱いを定義する
 - [ ] 失敗時のフォールバックデータを定義する
-- [ ] `docs` に Mint 由来アセット確認ページを追加する
-- [ ] `mint-threejs-skills` の役割を README に明記する
+- [x] `docs` に Mint 由来アセット確認ページを追加する
+- [x] `mint-threejs-skills` の役割を README に明記する
 - [ ] エンジンコアが Mint 非依存で動くことを確認する
 
 ## Phase 17: 共通アセットパイプライン

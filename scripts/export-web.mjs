@@ -12,6 +12,7 @@ const assetFiles = [
   "vrm-body-data.json",
   "vrm-pose-data.json",
   "shared-assets.json",
+  "mint-assets.json",
   "test002.mp4",
 ];
 
@@ -45,6 +46,11 @@ async function main() {
     join(publicDir, "explanation.html"),
     "./test002.mp4",
     "../assets/test002.mp4",
+  );
+  await rewriteFile(
+    join(publicDir, "mint-assets.html"),
+    "./mint-assets.json",
+    "../assets/mint-assets.json",
   );
 
   for (const fileName of assetFiles) {

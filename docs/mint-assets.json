@@ -1,0 +1,45 @@
+{
+  "id": "mint-assets",
+  "version": "1.0",
+  "provider": "Mint MCP",
+  "client": "mint-threejs-skills",
+  "description": "Mint MCP 由来の生成アセットを Three.js 側で参照するための確認データ。",
+  "assets": [
+    {
+      "id": "mint_world_splat",
+      "kind": "splat",
+      "source": "mint/world.splat",
+      "alias": ["world", "ミントワールド"],
+      "scriptName": "mint_world_splat",
+      "tags": ["world", "generated", "streaming"],
+      "meta": {
+        "format": "gaussian-splat",
+        "streaming": true
+      }
+    },
+    {
+      "id": "mint_player_model",
+      "kind": "model",
+      "source": "mint/player.glb",
+      "alias": ["player", "プレイヤー"],
+      "scriptName": "mint_player_model",
+      "tags": ["character", "generated"],
+      "meta": {
+        "format": "gltf",
+        "colliders": true
+      }
+    },
+    {
+      "id": "mint_collision_map",
+      "kind": "data",
+      "source": "mint/colliders.json",
+      "alias": ["colliders", "衝突"],
+      "scriptName": "mint_collision_map",
+      "tags": ["collision", "data"],
+      "meta": {
+        "format": "json",
+        "runtime": "threejs"
+      }
+    }
+  ]
+}
