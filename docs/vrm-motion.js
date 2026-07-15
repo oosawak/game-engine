@@ -3,12 +3,12 @@ const MANIFEST_SOURCES = ["./shared-assets.json", "./vrm-editor-data.json"];
 const DEFAULT_TAGS = ["", "idle", "loop", "locomotion", "movement", "gesture", "emote", "default", "safe", "once", "reaction", "combat", "pose"];
 
 const DEFAULT_MOTIONS = [
-  { id: "vrm_idle_default", alias: "待機", scriptName: "vrm_idle_default", displayName: "Idle / Wait", source: "motions/idle.vrma", tags: ["idle", "loop", "default", "safe"], priority: 10, loop: true, duration: "00:12" },
-  { id: "motion_walk_normal", alias: "歩き", scriptName: "motion_walk_normal", displayName: "Walk", source: "motions/walk.glb", tags: ["loop", "locomotion", "movement"], priority: 30, loop: true, duration: "00:08" },
-  { id: "motion_run_fast", alias: "走り", scriptName: "motion_run_fast", displayName: "Run", source: "motions/run.glb", tags: ["loop", "locomotion", "movement"], priority: 35, loop: true, duration: "00:06" },
-  { id: "motion_bow_polite", alias: "おじぎ", scriptName: "motion_bow_polite", displayName: "Bow", source: "motions/bow.vrma", tags: ["gesture", "once", "pose"], priority: 50, loop: false, duration: "00:03" },
-  { id: "motion_wave_right", alias: "挨拶", scriptName: "motion_wave_right", displayName: "Wave", source: "motions/wave.vrma", tags: ["emote", "once", "reaction"], priority: 45, loop: false, duration: "00:04" },
-  { id: "motion_attack_light", alias: "攻撃", scriptName: "motion_attack_light", displayName: "Attack", source: "motions/attack.glb", tags: ["combat", "once", "reaction"], priority: 70, loop: false, duration: "00:05" },
+  { id: "vrm_idle_default", alias: "待機", scriptName: "vrm_idle_default", displayName: "Idle / Wait", source: "motions/idle.vrma", tags: ["idle", "loop", "default", "safe"], priority: 10, loop: true, duration: "00:12", boneRotations: [{ bone: "hips", rotation: [0, 0, 0] }, { bone: "spine", rotation: [0, 0, 0] }] },
+  { id: "motion_walk_normal", alias: "歩き", scriptName: "motion_walk_normal", displayName: "Walk", source: "motions/walk.glb", tags: ["loop", "locomotion", "movement"], priority: 30, loop: true, duration: "00:08", boneRotations: [{ bone: "hips", rotation: [0, 4, 0] }] },
+  { id: "motion_run_fast", alias: "走り", scriptName: "motion_run_fast", displayName: "Run", source: "motions/run.glb", tags: ["loop", "locomotion", "movement"], priority: 35, loop: true, duration: "00:06", boneRotations: [{ bone: "hips", rotation: [0, 8, 0] }] },
+  { id: "motion_bow_polite", alias: "おじぎ", scriptName: "motion_bow_polite", displayName: "Bow", source: "motions/bow.vrma", tags: ["gesture", "once", "pose"], priority: 50, loop: false, duration: "00:03", boneRotations: [{ bone: "spine", rotation: [18, 0, 0] }] },
+  { id: "motion_wave_right", alias: "挨拶", scriptName: "motion_wave_right", displayName: "Wave", source: "motions/wave.vrma", tags: ["emote", "once", "reaction"], priority: 45, loop: false, duration: "00:04", boneRotations: [{ bone: "rightUpperArm", rotation: [0, 0, 42] }] },
+  { id: "motion_attack_light", alias: "攻撃", scriptName: "motion_attack_light", displayName: "Attack", source: "motions/attack.glb", tags: ["combat", "once", "reaction"], priority: 70, loop: false, duration: "00:05", boneRotations: [{ bone: "rightUpperArm", rotation: [0, 0, 55] }, { bone: "spine", rotation: [10, 0, 0] }] },
 ];
 
 const state = {
@@ -33,11 +33,48 @@ const PRESET_POSES = {
 };
 
 function cloneMotionList(list) {
-  return list.map((motion) => ({ ...motion, tags: [...(motion.tags ?? [])] }));
+  return list.map((motion) => ({
+    ...motion,
+    tags: [...(motion.tags ?? [])],
+    boneRotations: cloneBoneRotations(motion.boneRotations),
+  }));
 }
 
 function cloneMotion(motion) {
-  return motion ? { ...motion, tags: [...(motion.tags ?? [])] } : null;
+  if (!motion) {
+    return null;
+  }
+
+  return {
+    ...motion,
+    tags: [...(motion.tags ?? [])],
+    boneRotations: cloneBoneRotations(motion.boneRotations),
+  };
+}
+
+function cloneBoneRotations(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => ({
+      bone: typeof entry.bone === "string" ? entry.bone : "",
+      rotation: normalizeRotationArray(entry.rotation),
+    }))
+    .filter((entry) => entry.bone.trim().length > 0);
+}
+
+function normalizeRotationArray(value) {
+  const values = Array.isArray(value) ? value.slice(0, 3) : [];
+  while (values.length < 3) {
+    values.push(0);
+  }
+  return values.map((entry) => {
+    const number = Number(entry);
+    return Number.isFinite(number) ? number : 0;
+  });
 }
 
 function normalize(value) {
@@ -62,8 +99,9 @@ function normalizeMotion(raw, index) {
   const priority = Number.isFinite(Number(raw.priority)) ? Number(raw.priority) : 0;
   const loop = Boolean(raw.loop);
   const duration = typeof raw.duration === "string" && raw.duration.trim() ? raw.duration.trim() : "00:00";
+  const boneRotations = normalizeBoneRotations(raw.boneRotations);
 
-  return { id, alias, scriptName, displayName, source, tags: [...tagsValue], priority, loop, duration };
+  return { id, alias, scriptName, displayName, source, tags: [...tagsValue], priority, loop, duration, boneRotations };
 }
 
 function extractMotionEntries(rawData) {
@@ -108,6 +146,18 @@ function formatDuration(duration) {
   const minutes = Math.floor(wholeSeconds / 60);
   const remainingSeconds = wholeSeconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
+function normalizeBoneRotations(value) {
+  if (typeof value === "string") {
+    try {
+      return cloneBoneRotations(JSON.parse(value));
+    } catch (error) {
+      return [];
+    }
+  }
+
+  return cloneBoneRotations(value);
 }
 
 function uniqueTags(list, providedTags = []) {
@@ -162,6 +212,7 @@ function applyMotionSnapshot(target, snapshot) {
   target.priority = snapshot.priority;
   target.loop = snapshot.loop;
   target.duration = snapshot.duration;
+  target.boneRotations = cloneBoneRotations(snapshot.boneRotations);
 }
 
 function resetSelectedMotion() {
@@ -194,6 +245,37 @@ function applyPresetPose(presetId) {
   applyMotionSnapshot(motion, snapshot);
   state.selectedId = motion.id;
   state.playing = preset.label;
+  render();
+}
+
+function serializeBoneRotations(rotations) {
+  return JSON.stringify(cloneBoneRotations(rotations), null, 2);
+}
+
+function loadBoneRotationsFromTextarea() {
+  const motion = getSelectedMotion();
+  if (!motion || !refs.detailBoneRotations) {
+    return;
+  }
+
+  try {
+    motion.boneRotations = normalizeBoneRotations(refs.detailBoneRotations.value);
+    state.error = "";
+    render();
+  } catch (error) {
+    state.error = "Bone rotations JSON could not be parsed.";
+    render();
+  }
+}
+
+function resetBoneRotations() {
+  const motion = getSelectedMotion();
+  const snapshot = motion ? getBaseMotion(motion.id) : null;
+  if (!motion || !snapshot) {
+    return;
+  }
+
+  motion.boneRotations = cloneBoneRotations(snapshot.boneRotations);
   render();
 }
 
@@ -282,6 +364,9 @@ function renderDetails() {
   refs.detailPriority.value = String(motion.priority);
   refs.detailLoop.value = String(motion.loop);
   refs.detailDuration.textContent = motion.duration;
+  if (refs.detailBoneRotations) {
+    refs.detailBoneRotations.value = serializeBoneRotations(motion.boneRotations);
+  }
   refs.detailTagRow.innerHTML = motion.tags.map((tag) => `<span class="mini-chip">${tag}</span>`).join("");
   refs.footerSummary.textContent = `${motion.displayName} / ${motion.scriptName}`;
   refs.codeSnippet.textContent = [
@@ -405,11 +490,14 @@ async function init() {
   refs.detailAlias = document.getElementById("detailAlias");
   refs.detailDisplayName = document.getElementById("detailDisplayName");
   refs.detailTags = document.getElementById("detailTags");
+  refs.applyBoneRotations = document.getElementById("applyBoneRotations");
+  refs.resetBoneRotations = document.getElementById("resetBoneRotations");
   refs.detailSource = document.getElementById("detailSource");
   refs.detailPriority = document.getElementById("detailPriority");
   refs.detailLoop = document.getElementById("detailLoop");
   refs.detailDuration = document.getElementById("detailDuration");
   refs.detailTagRow = document.getElementById("detailTagRow");
+  refs.detailBoneRotations = document.getElementById("detailBoneRotations");
   refs.codeSnippet = document.getElementById("codeSnippet");
   refs.footerSummary = document.getElementById("footerSummary");
   refs.saveStatus = document.getElementById("saveStatus");
@@ -460,6 +548,14 @@ async function init() {
     applyPresetPose(refs.presetPose.value);
   });
 
+  refs.applyBoneRotations.addEventListener("click", () => {
+    loadBoneRotationsFromTextarea();
+  });
+
+  refs.resetBoneRotations.addEventListener("click", () => {
+    resetBoneRotations();
+  });
+
   bindInput(refs.detailScriptName, (motion, value) => { motion.scriptName = value || motion.id; });
   bindInput(refs.detailAlias, (motion, value) => { motion.alias = value; });
   bindInput(refs.detailDisplayName, (motion, value) => { motion.displayName = value; });
@@ -473,6 +569,9 @@ async function init() {
   });
   bindInput(refs.detailLoop, (motion, value) => {
     motion.loop = value === "true" || value === "1" || value === "yes";
+  });
+  refs.detailBoneRotations.addEventListener("input", () => {
+    state.saveStatus = "Unsaved";
   });
 
   render();

@@ -436,6 +436,20 @@
               <input id="detailTags" class="input" type="text" value="idle, loop, default, safe" />
             </div>
             <div class="field">
+              <div class="field-label"><span>Bone Rotations JSON</span><span>Saved per motion</span></div>
+              <textarea id="detailBoneRotations" class="input" rows="8" spellcheck="false">[
+  { "bone": "hips", "rotation": [0, 0, 0] },
+  { "bone": "spine", "rotation": [0, 0, 0] }
+]</textarea>
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Bone Rotation Actions</span><span>JSON</span></div>
+              <div class="filter-row">
+                <button class="mini-button" id="applyBoneRotations" type="button">Apply JSON</button>
+                <button class="mini-button" id="resetBoneRotations" type="button">Reset JSON</button>
+              </div>
+            </div>
+            <div class="field">
               <div class="field-label"><span>Reference</span><span>Example</span></div>
               <pre class="snippet" id="codeSnippet">motionCatalog.get("vrm_idle_default")</pre>
             </div>
