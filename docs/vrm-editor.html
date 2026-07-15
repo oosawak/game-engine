@@ -467,7 +467,7 @@
       <nav class="tabs" aria-label="Editor Tabs">
         <button class="tab">Scene</button>
         <button class="tab active">Editor</button>
-        <button class="tab">Preview</button>
+        <button class="tab">Scene View</button>
       </nav>
       <div class="topbar-actions">
         <span class="action-pill">Mode: Motion</span>
@@ -498,8 +498,11 @@
 
       <section class="panel">
         <div class="panel-header">
-          <span>Preview</span>
+          <span>Scene View</span>
           <div class="panel-actions">
+            <button class="mini-button active" type="button" data-scene-camera="front">Front</button>
+            <button class="mini-button" type="button" data-scene-camera="side">Side</button>
+            <button class="mini-button" type="button" data-scene-camera="orbit">Orbit</button>
             <span class="panel-subtle" id="playingLabel">Playing: Idle / Wait</span>
           </div>
         </div>
@@ -524,6 +527,9 @@
               </div>
             </div>
             <div class="timeline-bar"><span id="timelineProgress"></span></div>
+            <div class="note" id="sceneViewNote">
+              Scene View は VRM の見た目確認用です。Camera プリセットを切り替えて、表示の向きを確認できます。
+            </div>
           </div>
           <div class="note">
             スクリプトは `id` を使ってモーションを指定し、`alias` は編集画面で付ける運用を想定します。
@@ -582,7 +588,7 @@
 
     <footer class="footer">
       <div id="footerSummary">VRM Editor Mock · 3 pane layout</div>
-      <div>Scene / Editor / Preview · Reset Pose / Preset Pose / Save / Load</div>
+      <div>Scene / Editor / Scene View · Reset Pose / Preset Pose / Save / Load</div>
     </footer>
   </main>
   <script type="module" src="./vrm-editor.js"></script>

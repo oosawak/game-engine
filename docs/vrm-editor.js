@@ -63,6 +63,7 @@ const state = {
   loading: true,
   error: "",
   saveStatus: "Unsaved",
+  sceneCameraPreset: "front",
 };
 
 const refs = {};
@@ -205,6 +206,7 @@ function serializeState() {
       search: state.search,
       tag: state.tag,
       playing: state.playing,
+      sceneCameraPreset: state.sceneCameraPreset,
     },
   };
 }
@@ -235,6 +237,7 @@ function hydrateState(snapshot) {
   state.search = typeof ui.search === "string" ? ui.search : state.search;
   state.tag = typeof ui.tag === "string" ? ui.tag : state.tag;
   state.playing = typeof ui.playing === "string" ? ui.playing : state.playing;
+  state.sceneCameraPreset = typeof ui.sceneCameraPreset === "string" ? ui.sceneCameraPreset : state.sceneCameraPreset;
 
   if (!motions.some((motion) => motion.id === state.selectedId)) {
     state.selectedId = motions[0]?.id ?? "";
@@ -385,6 +388,7 @@ function renderDetails() {
   refs.overlayId.textContent = motion.id;
   refs.overlayAlias.textContent = motion.alias || "(none)";
   refs.playingLabel.textContent = `Playing: ${state.playing}`;
+  refs.sceneViewNote.textContent = `Scene View: ${state.sceneCameraPreset}`;
   refs.timelineProgress.style.width = motion.loop ? "38%" : "64%";
   refs.footerSummary.textContent = state.error
     ? `${motion.displayName} / ${motion.id} · fallback data`
@@ -404,9 +408,20 @@ function bindDetailInput(input, updater) {
 }
 
 function render() {
+  renderSceneCameraButtons();
   renderTagFilters();
   renderMotionList();
   renderDetails();
+}
+
+function renderSceneCameraButtons() {
+  if (!refs.sceneCameraButtons) {
+    return;
+  }
+
+  for (const button of refs.sceneCameraButtons) {
+    button.classList.toggle("active", button.dataset.sceneCamera === state.sceneCameraPreset);
+  }
 }
 
 async function loadMotionManifest() {
@@ -458,6 +473,7 @@ function init() {
   refs.tagFilters = document.getElementById("tagFilters");
   refs.motionSearch = document.getElementById("motionSearch");
   refs.playingLabel = document.getElementById("playingLabel");
+  refs.sceneViewNote = document.getElementById("sceneViewNote");
   refs.overlayId = document.getElementById("overlayId");
   refs.overlayAlias = document.getElementById("overlayAlias");
   refs.timelineProgress = document.getElementById("timelineProgress");
@@ -477,6 +493,7 @@ function init() {
   refs.seekLabel = document.getElementById("seekLabel");
   refs.saveStatus = document.getElementById("saveStatus");
   refs.tabButtons = [...document.querySelectorAll(".tab")];
+  refs.sceneCameraButtons = [...document.querySelectorAll("[data-scene-camera]")];
 
   refs.motionSearch.addEventListener("input", () => {
     state.search = refs.motionSearch.value;
@@ -505,6 +522,13 @@ function init() {
     motion.loop = !motion.loop;
     render();
   });
+
+  for (const button of refs.sceneCameraButtons) {
+    button.addEventListener("click", () => {
+      state.sceneCameraPreset = button.dataset.sceneCamera || "front";
+      render();
+    });
+  }
 
   refs.saveButton.addEventListener("click", () => {
     persistState("Saved locally");
