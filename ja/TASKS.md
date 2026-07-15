@@ -76,16 +76,16 @@
 
 ## Phase 7: Script Support
 
-- [ ] `ScriptComponent` を実装する
-- [ ] スクリプトのライフサイクル契約を定義する
+- [x] `ScriptComponent` を実装する
+- [x] スクリプトのライフサイクル契約を定義する
 - [ ] サンプルのゲームプレイ用コンポーネントを追加する
-- [ ] ユーザー定義 Component 実行のテストを追加する
+- [x] ユーザー定義 Component 実行のテストを追加する
 
 ## Phase 8: 描画境界
 
-- [ ] `Renderer` インターフェースを定義する
-- [ ] `RenderContext` を定義する
-- [ ] `RendererComponent` を実装する
+- [x] `Renderer` インターフェースを定義する
+- [x] `RenderContext` を定義する
+- [x] `RendererComponent` を実装する
 - [ ] `CameraComponent` を実装する
 - [ ] `LightComponent` を実装する
 - [ ] Camera の視野、投影方式、ズーム、追従対象を定義する

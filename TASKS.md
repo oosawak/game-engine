@@ -76,16 +76,16 @@ Turn the design documents into an implementable TypeScript game engine core.
 
 ## Phase 7: Script Support
 
-- [ ] Implement `ScriptComponent`
-- [ ] Define the script lifecycle contract
+- [x] Implement `ScriptComponent`
+- [x] Define the script lifecycle contract
 - [ ] Add sample gameplay behavior component
-- [ ] Add unit tests for user-defined component execution
+- [x] Add unit tests for user-defined component execution
 
 ## Phase 8: Rendering Boundary
 
-- [ ] Define `Renderer` interface
-- [ ] Define `RenderContext`
-- [ ] Implement `RendererComponent`
+- [x] Define `Renderer` interface
+- [x] Define `RenderContext`
+- [x] Implement `RendererComponent`
 - [ ] Implement `CameraComponent`
 - [ ] Implement `LightComponent`
 - [ ] Add placeholder `Mesh`, `Material`, and `Shader` types
@@ -148,4 +148,3 @@ The first MVP is done when:
 8. `Engine`
 9. `ScriptComponent`
 10. Rendering boundary
-
