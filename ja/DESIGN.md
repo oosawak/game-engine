@@ -455,3 +455,75 @@ JavaScript / TypeScript 側のエンジンは、WASM がなくても動作でき
 ## 12. 次のステップ
 
 この文書が確定したら、設計に対応する TypeScript の初期ソースを作成し、ライフサイクルとシーン管理のテストを追加する。
+
+## 13. Mint MCP 統合レイヤー
+
+### 13.1 位置づけ
+
+Mint MCP はエンジンコアではなく、外部アセット供給レイヤーとして統合する。
+
+- コアエンジンは Mint がなくても動作する
+- Mint は生成アセットの取得と更新を高速化する補助レイヤーとする
+- `mint-threejs-skills` は Mint MCP を扱う Three.js 側のクライアント実装ガイドとして扱う
+
+### 13.2 役割分担
+
+- Mint MCP: 3D アセット生成とメタデータ提供
+- Integration Layer: 取得、正規化、キャッシュ、失敗時フォールバック
+- Editor Layer: 生成アセットの確認、命名、保存、差し替え
+- Runtime Layer: 正規化済みアセットの読み込みと描画
+
+### 13.3 推奨フォルダ構成
+
+```text
+src/
+  integration/
+    mint/
+      MintMcpAdapter.ts
+      MintAssetProvider.ts
+      MintAssetManifest.ts
+      MintAssetCache.ts
+      MintAssetNormalizer.ts
+      MintColliderAdapter.ts
+      MintStreamingAdapter.ts
+  assets/
+    manifest/
+      mint-assets.json
+      vrm-motion-manifest.json
+```
+
+### 13.4 アセットフロー
+
+```text
+AI Agent
+  -> Mint MCP
+  -> Asset URL / Metadata / Collider / Streaming info
+  -> Mint Integration Layer
+  -> Engine Resource / Scene / Editor
+```
+
+### 13.5 対応データ種別
+
+- Gaussian Splat
+- GLTF / GLB
+- Collider データ
+- Streaming 参照情報
+- 表示名、タグ、優先度、スクリプト参照名
+
+### 13.6 設計原則
+
+- 生成アセットは JSON マニフェストとして保持する
+- 実体の取得失敗時はローカルのフォールバックデータを使う
+- エンジン本体は Mint 依存にしない
+- Editor と Runtime で同じマニフェストを参照できるようにする
+- 生成結果は `id` と `scriptName` を分離して管理する
+
+### 13.7 Three.js 側との関係
+
+`mint-threejs-skills` は Three.js 側の統合手順を提供するため、以下の役割に分けると扱いやすい。
+
+- アセットのロード手順
+- 生成物の検証
+- コライダーの配置
+- 表示用のメタ情報管理
+- 編集画面との接続

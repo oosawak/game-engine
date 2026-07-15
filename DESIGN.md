@@ -325,3 +325,74 @@ The core MVP is complete when:
 
 If this document is accepted, the next step is to create the initial TypeScript source files that match this design and then add tests for lifecycle and scene management.
 
+## 13. Mint MCP Integration Layer
+
+### 13.1 Positioning
+
+Mint MCP should be integrated as an external asset supply layer, not as part of the engine core.
+
+- The core engine must run without Mint
+- Mint is a productivity layer for asset generation and updates
+- `mint-threejs-skills` should be treated as the client-side integration guide for using Mint MCP with Three.js
+
+### 13.2 Responsibility Split
+
+- Mint MCP: 3D asset generation and metadata delivery
+- Integration Layer: fetch, normalize, cache, and provide fallbacks
+- Editor Layer: inspect, name, save, and replace generated assets
+- Runtime Layer: load and render normalized assets
+
+### 13.3 Suggested Folder Structure
+
+```text
+src/
+  integration/
+    mint/
+      MintMcpAdapter.ts
+      MintAssetProvider.ts
+      MintAssetManifest.ts
+      MintAssetCache.ts
+      MintAssetNormalizer.ts
+      MintColliderAdapter.ts
+      MintStreamingAdapter.ts
+  assets/
+    manifest/
+      mint-assets.json
+      vrm-motion-manifest.json
+```
+
+### 13.4 Asset Flow
+
+```text
+AI Agent
+  -> Mint MCP
+  -> Asset URL / Metadata / Collider / Streaming info
+  -> Mint Integration Layer
+  -> Engine Resource / Scene / Editor
+```
+
+### 13.5 Supported Data Types
+
+- Gaussian Splat
+- GLTF / GLB
+- Collider metadata
+- Streaming references
+- Display name, tags, priority, and script reference name
+
+### 13.6 Design Principles
+
+- Store generated assets as JSON manifests
+- Fall back to local data when remote assets fail to load
+- Keep the engine core independent from Mint
+- Allow the Editor and Runtime to read the same manifest
+- Separate `id` and `scriptName` for generated results
+
+### 13.7 Relationship to Three.js
+
+`mint-threejs-skills` should be understood as the Three.js-side client guidance for:
+
+- Loading assets
+- Validating generated outputs
+- Placing colliders
+- Managing metadata for display
+- Connecting editor screens to runtime assets

@@ -169,6 +169,31 @@
 - [ ] `Scene View` で VRM の見た目を確認できるようにする
 - [ ] VRM 本体とポーズデータを分離して管理する
 
+## Phase 16: Mint MCP Integration
+
+- [ ] `MintMcpAdapter` を設計する
+- [ ] `MintAssetProvider` の抽象を定義する
+- [ ] 生成アセットの JSON マニフェスト形式を定義する
+- [ ] Gaussian Splat の読み込み方針を定義する
+- [ ] GLTF / GLB の読み込み方針を定義する
+- [ ] Collider メタデータの受け取り方を定義する
+- [ ] Streaming 情報の扱いを定義する
+- [ ] 失敗時のフォールバックデータを定義する
+- [ ] `docs` に Mint 由来アセット確認ページを追加する
+- [ ] `mint-threejs-skills` の役割を README に明記する
+- [ ] エンジンコアが Mint 非依存で動くことを確認する
+
+## Mint Integration MVP 定義
+
+次を満たしたら Mint 統合の初期版完了とする。
+
+- Mint MCP 由来のアセット定義を JSON で保持できる
+- `id`、`scriptName`、`alias` を分けて扱える
+- 生成アセットの取得失敗時にフォールバックへ切り替えられる
+- Editor と Runtime が同じマニフェストを参照できる
+- コアエンジンが Mint 非依存で動作する
+- 三次元アセットの確認ページが `docs` に用意されている
+
 ## MVP 定義
 
 次を満たしたら最初の MVP 完了とする。

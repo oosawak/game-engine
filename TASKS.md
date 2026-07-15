@@ -123,6 +123,31 @@ Turn the design documents into an implementable TypeScript game engine core.
 - [ ] Add build verification
 - [ ] Add README usage notes for the first runnable state
 
+## Phase 13: Mint MCP Integration
+
+- [ ] Define `MintMcpAdapter`
+- [ ] Define `MintAssetProvider`
+- [ ] Define the JSON manifest format for generated assets
+- [ ] Define the loading policy for Gaussian Splat
+- [ ] Define the loading policy for GLTF / GLB
+- [ ] Define how collider metadata is received
+- [ ] Define how streaming metadata is handled
+- [ ] Define fallback data for load failures
+- [ ] Add a `docs` page for reviewing Mint-generated assets
+- [ ] Document the role of `mint-threejs-skills` in the README
+- [ ] Verify the engine core runs without Mint
+
+## Mint Integration MVP Definition
+
+The initial Mint integration is done when:
+
+- Mint MCP asset definitions can be stored as JSON
+- `id`, `scriptName`, and `alias` are handled separately
+- The system can fall back when generated assets fail to load
+- The Editor and Runtime can read the same manifest
+- The core engine still runs without Mint
+- A review page for 3D assets exists under `docs`
+
 ## MVP Definition
 
 The first MVP is done when:
