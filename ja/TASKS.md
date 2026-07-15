@@ -183,6 +183,17 @@
 - [ ] `mint-threejs-skills` の役割を README に明記する
 - [ ] エンジンコアが Mint 非依存で動くことを確認する
 
+## Phase 17: 共通アセットパイプライン
+
+- [x] `AssetManifest` を実装する
+- [x] `AssetEntry` に `id`、`kind`、`source`、`alias`、`scriptName` を持たせる
+- [x] VRM モーション、PNG、音声、シーンを同一形式で参照できるようにする
+- [x] 外部ツールから出力した JSON をエンジン側で読めるようにする
+- [x] `ResourceManager` と共通アセットを接続する
+- [x] アセット検索の単体テストを追加する
+- [x] 共通アセット形式の説明を `ja/DESIGN.md` に追加する
+- [x] 共通アセットの利用方針を `ja/REQUIREMENTS.md` に追記する
+
 ## Mint Integration MVP 定義
 
 次を満たしたら Mint 統合の初期版完了とする。
@@ -193,6 +204,17 @@
 - Editor と Runtime が同じマニフェストを参照できる
 - コアエンジンが Mint 非依存で動作する
 - 三次元アセットの確認ページが `docs` に用意されている
+
+## Shared Asset MVP 定義
+
+次を満たしたら共通アセット基盤の初期版完了とする。
+
+- `AssetManifest` を JSON から生成できる
+- `id`、`kind`、`source`、`alias`、`scriptName` を持つ
+- `alias` や `tag` でアセット検索できる
+- VRM モーションや PNG を同じマニフェストで扱える
+- 外部ツールの出力をそのまま読める
+- `ResourceManager` と共存して使える
 
 ## MVP 定義
 

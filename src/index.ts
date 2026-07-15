@@ -14,6 +14,7 @@ export * from "./engine/math/Vector2.js";
 export * from "./engine/math/Vector3.js";
 export * from "./engine/object/GameObject.js";
 export * from "./engine/resource/Resource.js";
+export * from "./engine/resource/AssetManifest.js";
 export * from "./engine/resource/ResourceLoader.js";
 export * from "./engine/resource/ResourceManager.js";
 export * from "./engine/rendering/RenderContext.js";
