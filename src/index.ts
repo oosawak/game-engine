@@ -22,3 +22,6 @@ export * from "./engine/rendering/RendererComponent.js";
 export * from "./engine/script/ScriptComponent.js";
 export * from "./engine/scene/Scene.js";
 export * from "./engine/scene/SceneManager.js";
+export * from "./application/Game.js";
+export * from "./application/MainScene.js";
+export * from "./application/MovingObjectComponent.js";
