@@ -878,7 +878,7 @@
         </div>
         <div class="panel-body">
           <div class="property-list">
-            <details class="property" open>
+            <details class="property" id="transformProperty" open>
               <summary class="property-header">
                 <span class="property-summary-meta"><span>Transform</span><span class="property-caret">▾</span></span>
                 <span>editable</span>
@@ -974,7 +974,7 @@
                 </label>
               </div>
             </details>
-            <details class="property" open>
+            <details class="property" id="scriptProperty" open>
               <summary class="property-header">
                 <span class="property-summary-meta"><span>Script</span><span class="property-caret">▾</span></span>
                 <span id="scriptMode">selected cube</span>
@@ -1255,6 +1255,7 @@
   <script type="module">
     import * as THREE from "three";
     import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+    import { INSPECTOR_LAYOUT } from "../docs/inspector-layout.js";
 
     const viewport = document.getElementById("viewport");
     const sceneShell = document.getElementById("sceneShell");
@@ -1347,6 +1348,15 @@
     const lightIntensityInput = document.getElementById("lightIntensityInput");
     const lightDistanceInput = document.getElementById("lightDistanceInput");
     const lightDecayInput = document.getElementById("lightDecayInput");
+    const inspectorSections = {
+      transform: document.getElementById("transformProperty"),
+      script: document.getElementById("scriptProperty"),
+      png: pngProperty,
+      vrm: vrmProperty,
+      camera: cameraProperty,
+      light: lightProperty,
+      advmng: advmngProperty,
+    };
 
     const STORAGE_KEY = "game-engine-orbit-script-v2";
     const DEFAULT_SCRIPT = `const angle = context.time * context.speed;
@@ -1466,6 +1476,26 @@ object.rotation.y = angle * 57.2957795;`;
 
     function clamp(value, min, max) {
       return Math.min(max, Math.max(min, value));
+    }
+
+    function getInspectorLayoutForObject(object) {
+      if (!object) {
+        return [];
+      }
+
+      return INSPECTOR_LAYOUT[object.type] ?? INSPECTOR_LAYOUT.default;
+    }
+
+    function updateInspectorLayout(object) {
+      const activeSections = new Set(getInspectorLayoutForObject(object));
+
+      Object.entries(inspectorSections).forEach(([key, section]) => {
+        if (!section) {
+          return;
+        }
+
+        section.hidden = !activeSections.has(key);
+      });
     }
 
     function loadScriptDraft() {
@@ -2805,15 +2835,12 @@ object.rotation.y = angle * 57.2957795;`;
         inspectorObjectName.textContent = "None";
         selectionBadge.textContent = "Selection: none";
         scriptMode.textContent = "no object selected";
-        pngProperty.hidden = true;
-        vrmProperty.hidden = true;
-        advmngProperty.hidden = true;
-        cameraProperty.hidden = true;
-        lightProperty.hidden = true;
+        updateInspectorLayout(null);
         closeAdvmngEditor();
         return;
       }
 
+      updateInspectorLayout(object);
       inspectorObjectName.textContent = object.name;
       selectionBadge.textContent = `Selection: ${object.name}`;
       scriptMode.textContent = `script for ${object.name} (${object.typeLabel ?? object.type})`;
@@ -2827,11 +2854,6 @@ object.rotation.y = angle * 57.2957795;`;
       inputs.scaleY.value = object.scale.y.toFixed(1);
       inputs.scaleZ.value = object.scale.z.toFixed(1);
       const isImage = isImageObject(object);
-      pngProperty.hidden = !isImage || isAdvmngObject(object);
-      vrmProperty.hidden = object.type !== "VRM";
-      advmngProperty.hidden = !isAdvmngObject(object);
-      cameraProperty.hidden = object.type !== "Camera";
-      lightProperty.hidden = object.type !== "Light";
       pngMode.textContent = isImage && !isAdvmngObject(object) ? (object.textureLabel || "image asset") : "image asset";
       vrmMode.textContent = object.type === "VRM" ? (object.vrmStatus || "model asset") : "model asset";
       advmngMode.textContent = isAdvmngObject(object) ? (object.textureLabel || "4 PNG composite") : "4 PNG composite";
