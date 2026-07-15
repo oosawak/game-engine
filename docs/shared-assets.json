@@ -1,0 +1,41 @@
+{
+  "id": "shared-assets",
+  "version": "1.0",
+  "assets": [
+    {
+      "id": "vrm_idle_default",
+      "kind": "vrm-motion",
+      "source": "motions/idle.vrma",
+      "alias": ["待機", "idle"],
+      "scriptName": "vrm_idle_default",
+      "tags": ["loop", "neutral", "default"],
+      "meta": {
+        "priority": 10,
+        "loop": true,
+        "duration": "00:12"
+      }
+    },
+    {
+      "id": "ui_title_logo",
+      "kind": "image",
+      "source": "images/title-logo.png",
+      "alias": ["タイトルロゴ"],
+      "scriptName": "title_logo",
+      "tags": ["ui", "title"],
+      "meta": {
+        "description": "Title screen logo"
+      }
+    },
+    {
+      "id": "scene_main",
+      "kind": "scene",
+      "source": "scenes/main.json",
+      "alias": ["MainScene"],
+      "scriptName": "main_scene",
+      "tags": ["game", "main"],
+      "meta": {
+        "entry": true
+      }
+    }
+  ]
+}
