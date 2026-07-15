@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VRM Editor Mock</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1016;
+      --panel: #121824;
+      --panel-2: #161d2a;
+      --panel-3: #1b2332;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.14);
+      --text: #e7edf8;
+      --muted: #8f9bb0;
+      --accent: #6cc1ff;
+      --accent-2: #7cf0b7;
+      --accent-3: #ffca6c;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --radius: 18px;
+      --radius-sm: 12px;
+      --topbar-h: 56px;
+      --footer-h: 84px;
+      --left-w: 290px;
+      --right-w: 340px;
+      --gutter: 14px;
+      --font: "Avenir Next", "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(108, 193, 255, 0.12), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(124, 240, 183, 0.09), transparent 30%),
+        linear-gradient(180deg, #0b0e14 0%, #101421 100%);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body { padding: 18px; }
+
+    .mock {
+      width: 100%;
+      height: calc(100vh - 36px);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)), var(--bg);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: var(--topbar-h) 1fr var(--footer-h);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .brand-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 0 4px rgba(108, 193, 255, 0.12);
+    }
+
+    .tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      min-width: 0;
+    }
+
+    .tab, .mini-button {
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      padding: 9px 12px;
+      border-radius: 999px;
+      font: inherit;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .tab.active, .mini-button.active {
+      color: var(--text);
+      background: rgba(108, 193, 255, 0.12);
+      border-color: rgba(108, 193, 255, 0.24);
+    }
+
+    .mini-button {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .action-pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: var(--left-w) minmax(0, 1fr) var(--right-w);
+      gap: var(--gutter);
+      padding: var(--gutter);
+      min-height: 0;
+    }
+
+    .panel {
+      min-width: 0;
+      min-height: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)), var(--panel);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .panel-subtle {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .panel-body {
+      min-height: 0;
+      padding: 12px;
+      overflow: auto;
+    }
+
+    .list,
+    .meta-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .motion-card {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .motion-card.active {
+      border-color: rgba(108, 193, 255, 0.24);
+      background: rgba(108, 193, 255, 0.09);
+    }
+
+    .motion-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .motion-subtitle {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag {
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .preview {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    .preview-stage {
+      min-height: 0;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background:
+        radial-gradient(circle at center, rgba(255, 255, 255, 0.12), transparent 58%),
+        linear-gradient(180deg, #1a2230 0%, #121724 100%);
+      display: grid;
+      place-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .avatar {
+      width: min(54vw, 280px);
+      height: min(54vw, 280px);
+      max-width: 280px;
+      max-height: 280px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background:
+        radial-gradient(circle at 35% 35%, rgba(255,255,255,0.24), transparent 24%),
+        linear-gradient(180deg, rgba(124, 240, 183, 0.2), rgba(108, 193, 255, 0.12));
+      box-shadow:
+        inset 0 0 0 18px rgba(255, 255, 255, 0.03),
+        0 18px 40px rgba(0, 0, 0, 0.28);
+      display: grid;
+      place-items: center;
+      color: var(--text);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .avatar::before {
+      content: "VRM";
+      font-size: clamp(34px, 5vw, 56px);
+    }
+
+    .preview-overlay {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      pointer-events: none;
+    }
+
+    .overlay-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(12, 15, 22, 0.74);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(14px);
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .overlay-badge strong { color: var(--accent-2); }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+    }
+
+    .timeline-bar {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .timeline-bar > span {
+      display: block;
+      width: 38%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .controls .group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .details {
+      display: grid;
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .field-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .field-value {
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.6;
+      word-break: break-word;
+    }
+
+    .input-row {
+      display: grid;
+      gap: 8px;
+    }
+
+    .input {
+      min-width: 0;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(9, 12, 19, 0.85);
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+    }
+
+    .note {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 202, 108, 0.08);
+      border: 1px solid rgba(255, 202, 108, 0.16);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    @media (max-width: 1120px) {
+      :root {
+        --left-w: 250px;
+        --right-w: 300px;
+      }
+    }
+
+    @media (max-width: 980px) {
+      body { overflow: auto; }
+      .mock {
+        height: auto;
+        min-height: calc(100vh - 36px);
+        grid-template-rows: auto auto auto;
+      }
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="mock">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        VRM Editor
+      </div>
+      <nav class="tabs" aria-label="Editor Tabs">
+        <button class="tab">Scene</button>
+        <button class="tab active">Editor</button>
+        <button class="tab">Preview</button>
+      </nav>
+      <div class="topbar-actions">
+        <span class="action-pill">Mode: Motion</span>
+        <button class="mini-button">Reset Pose</button>
+        <button class="mini-button">Preset Pose</button>
+        <button class="mini-button">Save</button>
+        <button class="mini-button active">Load</button>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <aside class="panel">
+        <div class="panel-header">
+          <span>Motion List</span>
+          <div class="panel-actions">
+            <span class="panel-subtle">12 items</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="list">
+            <article class="motion-card active">
+              <div class="motion-title"><span>Idle / Wait</span><span>vrm_idle_default</span></div>
+              <div class="motion-subtitle">基準姿勢。表示名は `待機`、alias は `待機`。</div>
+              <div class="tag-row">
+                <span class="tag">loop</span>
+                <span class="tag">default</span>
+                <span class="tag">safe</span>
+              </div>
+            </article>
+            <article class="motion-card">
+              <div class="motion-title"><span>Walk</span><span>motion_walk_normal</span></div>
+              <div class="motion-subtitle">歩行モーション。スクリプトからは ID 指定。</div>
+              <div class="tag-row">
+                <span class="tag">loop</span>
+                <span class="tag">locomotion</span>
+                <span class="tag">alias: 歩き</span>
+              </div>
+            </article>
+            <article class="motion-card">
+              <div class="motion-title"><span>Bow</span><span>motion_bow_polite</span></div>
+              <div class="motion-subtitle">おじぎ動作。単発再生の候補。</div>
+              <div class="tag-row">
+                <span class="tag">once</span>
+                <span class="tag">gesture</span>
+                <span class="tag">alias: おじぎ</span>
+              </div>
+            </article>
+            <article class="motion-card">
+              <div class="motion-title"><span>Wave</span><span>motion_wave_right</span></div>
+              <div class="motion-subtitle">手を振るアニメーション。会話時の反応用。</div>
+              <div class="tag-row">
+                <span class="tag">once</span>
+                <span class="tag">emote</span>
+                <span class="tag">alias: 挨拶</span>
+              </div>
+            </article>
+          </div>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="panel-header">
+          <span>Preview</span>
+          <div class="panel-actions">
+            <span class="panel-subtle">Playing: Idle / Wait</span>
+          </div>
+        </div>
+        <div class="panel-body preview">
+          <div class="preview-stage">
+            <div class="avatar" aria-hidden="true"></div>
+            <div class="preview-overlay">
+              <span class="overlay-badge">Selected <strong>vrm_idle_default</strong></span>
+              <span class="overlay-badge">Alias <strong>待機</strong></span>
+            </div>
+          </div>
+          <div class="timeline">
+            <div class="controls">
+              <div class="group">
+                <button class="mini-button active">Play</button>
+                <button class="mini-button">Stop</button>
+                <button class="mini-button">Loop</button>
+              </div>
+              <div class="group">
+                <span class="panel-subtle">Seek 00:05 / 00:12</span>
+              </div>
+            </div>
+            <div class="timeline-bar"><span></span></div>
+          </div>
+          <div class="note">
+            スクリプトは `id` を使ってモーションを指定し、`alias` は編集画面で付ける運用を想定します。
+            ここで名前を登録しておくと、ゲームロジックと UI の名前を分離できます。
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-header">
+          <span>Motion Details</span>
+          <div class="panel-actions">
+            <span class="panel-subtle">Editable</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="details">
+            <div class="field">
+              <div class="field-label"><span>ID</span><span>Required</span></div>
+              <div class="field-value">vrm_idle_default</div>
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Alias</span><span>Optional</span></div>
+              <div class="field-value">待機</div>
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Display Name</span><span>UI</span></div>
+              <div class="field-value">Idle / Wait</div>
+            </div>
+            <div class="input-row">
+              <label class="field">
+                <div class="field-label"><span>Source</span><span>BVH / VRMA / GLB</span></div>
+                <input class="input" type="text" value="motions/idle.bvh" />
+              </label>
+              <label class="field">
+                <div class="field-label"><span>Tags</span><span>Comma separated</span></div>
+                <input class="input" type="text" value="idle, loop, default" />
+              </label>
+              <label class="field">
+                <div class="field-label"><span>Priority</span><span>0 - 100</span></div>
+                <input class="input" type="number" value="10" min="0" max="100" />
+              </label>
+              <label class="field">
+                <div class="field-label"><span>Loop</span><span>Playback</span></div>
+                <input class="input" type="text" value="true" />
+              </label>
+            </div>
+            <div class="note">
+              `alias` は検索や一覧表示に使い、`id` はスクリプトからの安定参照に使います。
+              表示名を変えても壊れないようにするのが目的です。
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <footer class="footer">
+      <div>VRM Editor Mock · 3 pane layout</div>
+      <div>Scene / Editor / Preview · Reset Pose / Preset Pose / Save / Load</div>
+    </footer>
+  </main>
+</body>
+</html>
