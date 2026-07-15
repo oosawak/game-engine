@@ -9,6 +9,8 @@ const assetsDir = join(targetDir, "assets");
 
 const assetFiles = [
   "vrm-editor-data.json",
+  "vrm-body-data.json",
+  "vrm-pose-data.json",
   "shared-assets.json",
   "test002.mp4",
 ];
@@ -23,6 +25,16 @@ async function main() {
     join(publicDir, "vrm-editor.js"),
     "./vrm-editor-data.json",
     "../assets/vrm-editor-data.json",
+  );
+  await rewriteFile(
+    join(publicDir, "vrm-motion.js"),
+    "./vrm-body-data.json",
+    "../assets/vrm-body-data.json",
+  );
+  await rewriteFile(
+    join(publicDir, "vrm-motion.js"),
+    "./vrm-pose-data.json",
+    "../assets/vrm-pose-data.json",
   );
   await rewriteFile(
     join(publicDir, "vrm-motion.js"),
