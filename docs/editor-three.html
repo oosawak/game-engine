@@ -292,9 +292,12 @@
     .overlay-top, .overlay-left, .gizmo {
       position: absolute;
       z-index: 2;
-      pointer-events: none;
       display: flex;
       gap: 10px;
+    }
+
+    .overlay-top, .overlay-left {
+      pointer-events: none;
     }
 
     .overlay-top {
@@ -322,6 +325,7 @@
       background: rgba(14, 18, 27, 0.7);
       border: 1px solid var(--border);
       backdrop-filter: blur(14px);
+      pointer-events: auto;
     }
 
     .gizmo-row, .overlay-badge {
@@ -330,6 +334,30 @@
       gap: 8px;
       font-size: 12px;
       color: var(--text);
+    }
+
+    .gizmo-row {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .gizmo-row:hover .axis {
+      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
+    }
+
+    .gizmo-reset {
+      width: 100%;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
     }
 
     .overlay-badge {
@@ -860,10 +888,11 @@
             <span class="overlay-badge">FPS <strong id="fpsOverlay">60</strong></span>
             <span class="overlay-badge">Delta <strong id="deltaValue">16.6 ms</strong></span>
           </div>
-          <div class="gizmo" aria-hidden="true">
-            <div class="gizmo-row"><span class="axis x"></span> X axis</div>
-            <div class="gizmo-row"><span class="axis y"></span> Y axis</div>
-            <div class="gizmo-row"><span class="axis z"></span> Z axis</div>
+          <div class="gizmo">
+            <button class="gizmo-reset" type="button" data-camera-preset="default">Reset view</button>
+            <button class="gizmo-row" type="button" data-camera-preset="x"><span class="axis x"></span> X axis</button>
+            <button class="gizmo-row" type="button" data-camera-preset="y"><span class="axis y"></span> Y axis</button>
+            <button class="gizmo-row" type="button" data-camera-preset="z"><span class="axis z"></span> Z axis</button>
           </div>
         </div>
       </section>
@@ -1267,6 +1296,7 @@
     const modeToggle = document.getElementById("modeToggle");
     const mode2dButton = document.getElementById("mode2dButton");
     const mode3dButton = document.getElementById("mode3dButton");
+    const cameraPresetButtons = [...document.querySelectorAll("[data-camera-preset]")];
     const moveToolButton = document.getElementById("moveToolButton");
     const rotateToolButton = document.getElementById("rotateToolButton");
     const viewModeBadge = document.getElementById("viewModeBadge");
@@ -1396,6 +1426,7 @@ object.rotation.y = angle * 57.2957795;`;
       advmngEditorOpen: false,
       previewMode: "scene",
       activeTool: "move",
+      sceneCameraPreset: "default",
       sceneZoom2d: 1,
       sceneZoom3d: 1,
       objects: [],
@@ -2010,6 +2041,29 @@ object.rotation.y = angle * 57.2957795;`;
       render();
     }
 
+    function setSceneCameraPreset(preset) {
+      state.sceneCameraPreset = preset;
+      cameraPresetButtons.forEach((button) => {
+        const active = button.dataset.cameraPreset === preset;
+        button.classList.toggle("active", active);
+      });
+
+      const labelMap = {
+        default: "Default view",
+        x: "X axis view",
+        y: "Y axis view",
+        z: "Z axis view",
+      };
+      modeStatus.textContent = state.previewMode === "game"
+        ? "Game View"
+        : (state.mode === "2d"
+          ? "2D mode: standard"
+          : `3D mode: ${labelMap[preset] ?? "Default view"}`);
+      viewModeBadge.innerHTML = `View: <strong>${state.previewMode === "game" ? `Game / ${state.mode === "2d" ? "2D" : "3D"}` : (state.mode === "2d" ? "2D / standard" : `3D / ${labelMap[preset] ?? "Default"}`)}</strong>`;
+      updateCamera();
+      renderThree();
+    }
+
     function getObjectForwardVector(object) {
       const euler = new THREE.Euler(
         THREE.MathUtils.degToRad(object.rotation.x),
@@ -2285,10 +2339,17 @@ object.rotation.y = angle * 57.2957795;`;
       mode2dButton.classList.toggle("active", is2d);
       mode3dButton.classList.toggle("active", !is2d);
       modeToggle.classList.toggle("active", is2d);
-      viewModeBadge.innerHTML = `View: <strong>${state.previewMode === "game" ? `Game / ${is2d ? "2D" : "3D"}` : (is2d ? "2D" : "3D")}</strong>`;
+      if (is2d) {
+        state.sceneCameraPreset = "default";
+      }
+      cameraPresetButtons.forEach((button) => {
+        const active = !is2d && button.dataset.cameraPreset === state.sceneCameraPreset;
+        button.classList.toggle("active", active);
+      });
+      viewModeBadge.innerHTML = `View: <strong>${state.previewMode === "game" ? `Game / ${is2d ? "2D" : "3D"}` : (is2d ? "2D / standard" : `3D / ${state.sceneCameraPreset}`)}</strong>`;
       modeStatus.textContent = state.previewMode === "game"
         ? "Game View"
-        : (is2d ? "2D mode: XY + Z layer" : "3D mode");
+        : (is2d ? "2D mode: standard" : `3D mode: ${state.sceneCameraPreset}`);
       scriptMode.textContent = is2d
         ? "applies to the XY plane; Z is depth"
         : "applies to all Cubes around origin";
@@ -2923,7 +2984,20 @@ object.rotation.y = angle * 57.2957795;`;
       } else {
         const zoom = Math.max(0.5, state.sceneZoom3d);
         THREE_STATE.camera3d.aspect = aspect;
-        THREE_STATE.camera3d.position.set(6 / zoom, 5 / zoom, 6 / zoom);
+        const preset = state.sceneCameraPreset;
+        if (preset === "x") {
+          THREE_STATE.camera3d.up.set(0, 1, 0);
+          THREE_STATE.camera3d.position.set(10 / zoom, 2.5 / zoom, 0);
+        } else if (preset === "y") {
+          THREE_STATE.camera3d.up.set(0, 0, -1);
+          THREE_STATE.camera3d.position.set(0, 10 / zoom, 0.01);
+        } else if (preset === "z") {
+          THREE_STATE.camera3d.up.set(0, 1, 0);
+          THREE_STATE.camera3d.position.set(0, 2.5 / zoom, 10 / zoom);
+        } else {
+          THREE_STATE.camera3d.up.set(0, 1, 0);
+          THREE_STATE.camera3d.position.set(6 / zoom, 5 / zoom, 6 / zoom);
+        }
         THREE_STATE.camera3d.lookAt(0, 0.5, 0);
         THREE_STATE.camera3d.updateProjectionMatrix();
       }
@@ -3221,6 +3295,15 @@ object.rotation.y = angle * 57.2957795;`;
     modeToggle.addEventListener("click", () => setMode(state.mode === "2d" ? "3d" : "2d"));
     mode2dButton.addEventListener("click", () => setMode("2d"));
     mode3dButton.addEventListener("click", () => setMode("3d"));
+    cameraPresetButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const preset = button.dataset.cameraPreset || "default";
+        if (state.mode === "2d") {
+          setMode("3d");
+        }
+        setSceneCameraPreset(preset);
+      });
+    });
     runScriptButton.addEventListener("click", () => {
       compileScript();
     });
