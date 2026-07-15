@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Game View</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1016;
+      --panel: #121824;
+      --panel-2: #161d2a;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e7edf8;
+      --muted: #8f9bb0;
+      --accent: #6cc1ff;
+      --accent-2: #7cf0b7;
+      --accent-3: #ffca6c;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --radius: 18px;
+      --topbar-h: 56px;
+      --left-w: 260px;
+      --right-w: 300px;
+      --gutter: 14px;
+      --font: "Avenir Next", "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(108, 193, 255, 0.12), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(124, 240, 183, 0.09), transparent 30%),
+        linear-gradient(180deg, #0b0e14 0%, #101421 100%);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body { padding: 18px; }
+
+    .shell {
+      width: 100%;
+      height: calc(100vh - 36px);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)), var(--bg);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: var(--topbar-h) 1fr;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .brand-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 0 4px rgba(108, 193, 255, 0.12);
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .action-pill,
+    .mini-button {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      font-size: 12px;
+      font: inherit;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+
+    .mini-button.active {
+      color: var(--text);
+      background: rgba(108, 193, 255, 0.12);
+      border-color: rgba(108, 193, 255, 0.24);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: var(--left-w) minmax(0, 1fr) var(--right-w);
+      gap: var(--gutter);
+      padding: var(--gutter);
+      min-height: 0;
+    }
+
+    .panel {
+      min-width: 0;
+      min-height: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)), var(--panel);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .panel-subtle {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .panel-body {
+      min-height: 0;
+      padding: 12px;
+      overflow: auto;
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .tree-item,
+    .info-card,
+    .field {
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .tree-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .tree-item.active {
+      border-color: rgba(108, 193, 255, 0.26);
+      background: rgba(108, 193, 255, 0.09);
+    }
+
+    .tree-item small {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .stage {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    .viewport {
+      min-height: 0;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background:
+        radial-gradient(circle at center, rgba(255, 255, 255, 0.1), transparent 54%),
+        linear-gradient(180deg, #1a2230 0%, #121724 100%);
+      display: grid;
+      place-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .grid-line {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(circle at center, black 0%, transparent 78%);
+      opacity: 0.55;
+      pointer-events: none;
+    }
+
+    .cube {
+      width: 120px;
+      height: 120px;
+      border-radius: 18px;
+      background:
+        linear-gradient(135deg, rgba(124, 240, 183, 0.8), rgba(108, 193, 255, 0.82));
+      box-shadow: 0 24px 50px rgba(0, 0, 0, 0.35);
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      color: #08101b;
+      transform-style: preserve-3d;
+      transition: transform 120ms linear;
+    }
+
+    .cube span {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.18);
+      font-size: 13px;
+      letter-spacing: 0.08em;
+    }
+
+    .overlay {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      pointer-events: none;
+    }
+
+    .overlay-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(12, 15, 22, 0.74);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .overlay-badge strong { color: var(--accent-2); }
+
+    .field {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .field-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .field-value {
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    @media (max-width: 1120px) {
+      :root {
+        --left-w: 230px;
+        --right-w: 280px;
+      }
+    }
+
+    @media (max-width: 980px) {
+      body { overflow: auto; }
+      .shell {
+        height: auto;
+        min-height: calc(100vh - 36px);
+      }
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        Game View
+      </div>
+      <div class="topbar-actions">
+        <span class="action-pill" id="runtimeState">Stopped</span>
+        <a class="mini-button" href="./index.html">Home</a>
+        <button class="mini-button active" id="playButton" type="button">Play</button>
+        <button class="mini-button" id="stopButton" type="button">Stop</button>
+        <button class="mini-button" id="resetButton" type="button">Reset</button>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <aside class="panel">
+        <div class="panel-header">
+          <span>Scene</span>
+          <span class="panel-subtle">MainScene</span>
+        </div>
+        <div class="panel-body">
+          <div class="list" id="sceneTree">
+            <div class="tree-item active"><span>Cube</span><small>MovingObjectComponent</small></div>
+            <div class="tree-item"><span>MainCamera</span><small>CameraComponent</small></div>
+            <div class="tree-item"><span>DirectionalLight</span><small>LightComponent</small></div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="panel-header">
+          <span>Game View</span>
+          <span class="panel-subtle" id="frameInfo">Frame 0</span>
+        </div>
+        <div class="panel-body stage">
+          <div class="info-card field">
+            <div class="field-label"><span>Running</span><span>Demo</span></div>
+            <div class="field-value" id="summaryText">MainScene / Cube / Camera follow / Directional Light</div>
+          </div>
+          <div class="viewport" id="viewport">
+            <div class="grid-line"></div>
+            <div class="cube" id="cube"><span>CUBE</span></div>
+            <div class="overlay">
+              <span class="overlay-badge">Selected <strong id="selectedObject">Cube</strong></span>
+              <span class="overlay-badge">Mode <strong id="modeLabel">3D</strong></span>
+            </div>
+          </div>
+          <div class="info-card field">
+            <div class="field-label"><span>Output</span><span>Runtime</span></div>
+            <div class="field-value">アプリの出力先として使うゲーム実行画面です。ここから Scene の状態、Camera、Light、Object の動作を確認します。</div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-header">
+          <span>Inspector</span>
+          <span class="panel-subtle">Live State</span>
+        </div>
+        <div class="panel-body">
+          <div class="list">
+            <div class="field">
+              <div class="field-label"><span>Position</span><span>XYZ</span></div>
+              <div class="field-value" id="positionValue">0.0, 0.0, 0.0</div>
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Rotation</span><span>Degrees</span></div>
+              <div class="field-value" id="rotationValue">0.0, 0.0, 0.0</div>
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Camera</span><span>Follow</span></div>
+              <div class="field-value" id="cameraValue">MainCamera -> Cube</div>
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Light</span><span>Direction</span></div>
+              <div class="field-value">Directional / intensity 1.25 / shadow on</div>
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Controls</span><span>Input</span></div>
+              <div class="field-value">Play / Stop / Reset の動作確認用の公開ページです。</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+  <script type="module" src="./game-view.js"></script>
+</body>
+</html>
