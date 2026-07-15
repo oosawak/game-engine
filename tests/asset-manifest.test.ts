@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { AssetManifest } from "../src/engine/resource/AssetManifest.js";
 import { ResourceManager } from "../src/engine/resource/ResourceManager.js";
 
@@ -35,6 +37,17 @@ describe("Asset manifest", () => {
     expect(manifest.findByTag("loop")).toHaveLength(1);
     expect(manifest.findByKind("image")).toHaveLength(1);
     expect(manifest.toJSON().assets).toHaveLength(2);
+  });
+
+  it("accepts the shared asset sample with multiple kinds", async () => {
+    const source = await readFile(join(process.cwd(), "docs", "shared-assets.json"), "utf8");
+    const manifest = AssetManifest.fromJSON(JSON.parse(source));
+
+    expect(manifest.findByKind("vrm-motion")).toHaveLength(2);
+    expect(manifest.findByKind("image")).toHaveLength(2);
+    expect(manifest.findByKind("audio")).toHaveLength(1);
+    expect(manifest.findByKind("scene")).toHaveLength(2);
+    expect(manifest.findByAlias("field_bgm")?.id).toBe("audio_bgm_field");
   });
 
   it("loads shared asset manifests through the resource manager", async () => {

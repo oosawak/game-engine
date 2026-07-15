@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shared Assets</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1016;
+      --panel: #121824;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e7edf8;
+      --muted: #8f9bb0;
+      --accent: #6cc1ff;
+      --accent-2: #7cf0b7;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --font: "Avenir Next", "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(108, 193, 255, 0.12), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(124, 240, 183, 0.09), transparent 30%),
+        linear-gradient(180deg, #0b0e14 0%, #101421 100%);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    body {
+      padding: 24px;
+    }
+
+    .shell {
+      width: min(1280px, 100%);
+      margin: 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 24px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)), var(--panel);
+      box-shadow: var(--shadow);
+      display: grid;
+      gap: 18px;
+    }
+
+    .header {
+      display: grid;
+      gap: 10px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(108, 193, 255, 0.12);
+      border: 1px solid rgba(108, 193, 255, 0.24);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+
+    h1, h2, p { margin: 0; }
+    h1 { font-size: 28px; }
+    p { color: var(--muted); line-height: 1.7; }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .stat {
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 22px;
+      margin-bottom: 6px;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 980px;
+    }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.03);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    td {
+      color: var(--muted);
+    }
+
+    code {
+      color: #dbe6ff;
+      background: rgba(108, 193, 255, 0.08);
+      border: 1px solid rgba(108, 193, 255, 0.12);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .pill {
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .back {
+      color: var(--text);
+      text-decoration: none;
+      font-size: 13px;
+      align-self: start;
+      width: fit-content;
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="header">
+      <div class="badge"><span class="dot"></span> Shared Asset Manifest</div>
+      <h1>共通アセット一覧</h1>
+      <p>VRM モーション、PNG、音声、Scene を同じ JSON 形式で参照するための確認ページです。</p>
+      <a class="back" href="./index.html">← Back to docs index</a>
+    </div>
+
+    <section class="summary" id="summary"></section>
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Kind</th>
+            <th>Source</th>
+            <th>Alias / Script</th>
+            <th>Tags</th>
+            <th>Meta</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script type="module">
+    const manifest = await fetch("./shared-assets.json").then((response) => {
+      if (!response.ok) {
+        throw new Error(`Failed to load shared-assets.json: ${response.status}`);
+      }
+      return response.json();
+    });
+
+    const assets = Array.isArray(manifest.assets) ? manifest.assets : [];
+    const summary = document.getElementById("summary");
+    const rows = document.getElementById("rows");
+
+    const totals = new Map();
+    for (const asset of assets) {
+      totals.set(asset.kind, (totals.get(asset.kind) ?? 0) + 1);
+    }
+
+    summary.innerHTML = [
+      { value: manifest.id ?? "asset-manifest", label: "Manifest" },
+      { value: manifest.version ?? "1.0", label: "Version" },
+      { value: String(assets.length), label: "Assets" },
+      { value: String(totals.get("vrm-motion") ?? 0), label: "VRM Motion" },
+      { value: String(totals.get("image") ?? 0), label: "PNG / Image" },
+      { value: String(totals.get("audio") ?? 0), label: "Audio" },
+      { value: String(totals.get("scene") ?? 0), label: "Scene" },
+    ].map(({ value, label }) => `
+      <div class="stat">
+        <strong>${escapeHtml(value)}</strong>
+        <span>${escapeHtml(label)}</span>
+      </div>
+    `).join("");
+
+    rows.innerHTML = assets.map((asset) => {
+      const aliases = formatList(asset.alias);
+      const tags = formatList(asset.tags);
+      const meta = escapeHtml(JSON.stringify(asset.meta ?? {}, null, 2));
+      return `
+        <tr>
+          <td><code>${escapeHtml(asset.id)}</code></td>
+          <td>${escapeHtml(asset.kind)}</td>
+          <td>${escapeHtml(asset.source)}</td>
+          <td>
+            <div class="pill-row">${aliases}</div>
+            <div style="margin-top:8px;"><code>${escapeHtml(asset.scriptName || asset.id)}</code></div>
+          </td>
+          <td><div class="pill-row">${tags}</div></td>
+          <td><pre style="margin:0;white-space:pre-wrap;">${meta}</pre></td>
+        </tr>
+      `;
+    }).join("");
+
+    function formatList(values) {
+      if (!Array.isArray(values) || values.length === 0) {
+        return `<span style="color: var(--muted);">-</span>`;
+      }
+      return values.map((value) => `<span class="pill">${escapeHtml(String(value))}</span>`).join("");
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+  </script>
+</body>
+</html>

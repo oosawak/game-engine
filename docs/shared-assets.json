@@ -12,7 +12,43 @@
       "meta": {
         "priority": 10,
         "loop": true,
-        "duration": "00:12"
+        "duration": 12
+      }
+    },
+    {
+      "id": "vrm_wave",
+      "kind": "vrm-motion",
+      "source": "motions/wave.vrma",
+      "alias": ["wave", "挨拶"],
+      "scriptName": "vrm_wave",
+      "tags": ["gesture", "one-shot"],
+      "meta": {
+        "priority": 40,
+        "loop": false,
+        "duration": 3.2
+      }
+    },
+    {
+      "id": "png_player_icon",
+      "kind": "image",
+      "source": "images/player-icon.png",
+      "alias": ["player_icon", "プレイヤーアイコン"],
+      "scriptName": "png_player_icon",
+      "tags": ["ui", "avatar"],
+      "meta": {
+        "description": "Representative PNG asset"
+      }
+    },
+    {
+      "id": "audio_bgm_field",
+      "kind": "audio",
+      "source": "audio/bgm-field.mp3",
+      "alias": ["field_bgm", "フィールドBGM"],
+      "scriptName": "audio_bgm_field",
+      "tags": ["bgm", "loop"],
+      "meta": {
+        "volume": 0.8,
+        "loop": true
       }
     },
     {
@@ -35,6 +71,17 @@
       "tags": ["game", "main"],
       "meta": {
         "entry": true
+      }
+    },
+    {
+      "id": "scene_village",
+      "kind": "scene",
+      "source": "scenes/village.json",
+      "alias": ["VillageScene", "村"],
+      "scriptName": "scene_village",
+      "tags": ["game", "town"],
+      "meta": {
+        "entry": false
       }
     }
   ]
