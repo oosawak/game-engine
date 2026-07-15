@@ -1,0 +1,87 @@
+{
+  "id": "vrm-pose-data",
+  "version": "1.0",
+  "poses": [
+    {
+      "id": "vrm_idle_default",
+      "boneRotations": [
+        { "bone": "hips", "rotation": [0, 0, 0] },
+        { "bone": "spine", "rotation": [0, 0, 0] }
+      ],
+      "expressionAdjustments": [
+        { "name": "neutral", "weight": 0.8 },
+        { "name": "happy", "weight": 0.2 }
+      ],
+      "fingerAdjustments": [
+        { "hand": "left", "pose": "relaxed", "weight": 0.6 },
+        { "hand": "right", "pose": "relaxed", "weight": 0.6 }
+      ]
+    },
+    {
+      "id": "motion_walk_normal",
+      "boneRotations": [
+        { "bone": "hips", "rotation": [0, 4, 0] }
+      ],
+      "expressionAdjustments": [
+        { "name": "neutral", "weight": 1 }
+      ],
+      "fingerAdjustments": [
+        { "hand": "left", "pose": "open", "weight": 0.4 },
+        { "hand": "right", "pose": "open", "weight": 0.4 }
+      ]
+    },
+    {
+      "id": "motion_run_fast",
+      "boneRotations": [
+        { "bone": "hips", "rotation": [0, 8, 0] }
+      ],
+      "expressionAdjustments": [
+        { "name": "focused", "weight": 0.9 }
+      ],
+      "fingerAdjustments": [
+        { "hand": "left", "pose": "closed", "weight": 0.5 },
+        { "hand": "right", "pose": "closed", "weight": 0.5 }
+      ]
+    },
+    {
+      "id": "motion_bow_polite",
+      "boneRotations": [
+        { "bone": "spine", "rotation": [18, 0, 0] }
+      ],
+      "expressionAdjustments": [
+        { "name": "respectful", "weight": 1 }
+      ],
+      "fingerAdjustments": [
+        { "hand": "left", "pose": "open", "weight": 0.9 },
+        { "hand": "right", "pose": "open", "weight": 0.9 }
+      ]
+    },
+    {
+      "id": "motion_wave_right",
+      "boneRotations": [
+        { "bone": "rightUpperArm", "rotation": [0, 0, 42] }
+      ],
+      "expressionAdjustments": [
+        { "name": "happy", "weight": 1 }
+      ],
+      "fingerAdjustments": [
+        { "hand": "left", "pose": "open", "weight": 0.7 },
+        { "hand": "right", "pose": "wave", "weight": 1 }
+      ]
+    },
+    {
+      "id": "motion_attack_light",
+      "boneRotations": [
+        { "bone": "rightUpperArm", "rotation": [0, 0, 55] },
+        { "bone": "spine", "rotation": [10, 0, 0] }
+      ],
+      "expressionAdjustments": [
+        { "name": "angry", "weight": 0.9 }
+      ],
+      "fingerAdjustments": [
+        { "hand": "left", "pose": "grip", "weight": 1 },
+        { "hand": "right", "pose": "grip", "weight": 1 }
+      ]
+    }
+  ]
+}
