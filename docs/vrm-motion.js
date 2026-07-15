@@ -1,5 +1,6 @@
 const STORAGE_KEY = "game-engine.vrm-editor.v1";
-const DEFAULT_TAGS = ["", "idle", "loop", "locomotion", "gesture", "emote", "default", "safe", "once", "reaction", "combat", "pose"];
+const MANIFEST_SOURCES = ["./shared-assets.json", "./vrm-editor-data.json"];
+const DEFAULT_TAGS = ["", "idle", "loop", "locomotion", "movement", "gesture", "emote", "default", "safe", "once", "reaction", "combat", "pose"];
 
 const DEFAULT_MOTIONS = [
   { id: "vrm_idle_default", alias: "待機", scriptName: "vrm_idle_default", displayName: "Idle / Wait", source: "motions/idle.vrma", tags: ["idle", "loop", "default", "safe"], priority: 10, loop: true, duration: "00:12" },
@@ -38,7 +39,11 @@ function normalizeMotion(raw, index) {
   }
 
   const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : `motion_${index + 1}`;
-  const alias = typeof raw.alias === "string" ? raw.alias : "";
+  const alias = Array.isArray(raw.alias)
+    ? raw.alias.find((entry) => typeof entry === "string" && entry.trim()) ?? ""
+    : typeof raw.alias === "string"
+      ? raw.alias
+      : "";
   const scriptName = typeof raw.scriptName === "string" && raw.scriptName.trim() ? raw.scriptName.trim() : id;
   const displayName = typeof raw.displayName === "string" && raw.displayName.trim() ? raw.displayName.trim() : alias || id;
   const source = typeof raw.source === "string" && raw.source.trim() ? raw.source.trim() : "unknown";
@@ -48,6 +53,50 @@ function normalizeMotion(raw, index) {
   const duration = typeof raw.duration === "string" && raw.duration.trim() ? raw.duration.trim() : "00:00";
 
   return { id, alias, scriptName, displayName, source, tags: [...tagsValue], priority, loop, duration };
+}
+
+function extractMotionEntries(rawData) {
+  if (!rawData || typeof rawData !== "object") {
+    return [];
+  }
+
+  if (Array.isArray(rawData.motions)) {
+    return rawData.motions;
+  }
+
+  if (Array.isArray(rawData.assets)) {
+    return rawData.assets
+      .filter((asset) => asset && typeof asset === "object" && asset.kind === "vrm-motion")
+      .map((asset) => ({
+        id: asset.id,
+        alias: asset.alias,
+        scriptName: asset.scriptName,
+        displayName: typeof asset.meta?.displayName === "string" && asset.meta.displayName.trim()
+          ? asset.meta.displayName.trim()
+          : asset.scriptName ?? asset.id,
+        source: asset.source,
+        tags: asset.tags,
+        priority: asset.meta?.priority,
+        loop: asset.meta?.loop,
+        duration: typeof asset.meta?.duration === "number"
+          ? formatDuration(asset.meta.duration)
+          : asset.meta?.duration,
+      }));
+  }
+
+  return [];
+}
+
+function formatDuration(duration) {
+  const seconds = Number(duration);
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return "00:00";
+  }
+
+  const wholeSeconds = Math.floor(seconds);
+  const minutes = Math.floor(wholeSeconds / 60);
+  const remainingSeconds = wholeSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
 function uniqueTags(list, providedTags = []) {
@@ -68,7 +117,7 @@ function uniqueTags(list, providedTags = []) {
 }
 
 function applyMotionData(rawData) {
-  const loadedMotions = Array.isArray(rawData?.motions) ? rawData.motions.map(normalizeMotion).filter(Boolean) : [];
+  const loadedMotions = extractMotionEntries(rawData).map(normalizeMotion).filter(Boolean);
   motions = loadedMotions.length ? loadedMotions : cloneMotionList(DEFAULT_MOTIONS);
   tags = uniqueTags(motions, Array.isArray(rawData?.tags) ? rawData.tags : DEFAULT_TAGS);
 
@@ -248,17 +297,23 @@ function findMotionFromQuery() {
 }
 
 async function loadManifest() {
-  try {
-    const response = await fetch(new URL("./vrm-editor-data.json", import.meta.url));
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+  for (const source of MANIFEST_SOURCES) {
+    try {
+      const response = await fetch(new URL(source, import.meta.url));
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      applyMotionData(data);
+      state.error = "";
+      return;
+    } catch (error) {
+      // Try the next source.
     }
-    const data = await response.json();
-    applyMotionData(data);
-  } catch (error) {
-    applyMotionData(null);
-    state.error = "Motion manifest could not be loaded. Using fallback data.";
   }
+
+  applyMotionData(null);
+  state.error = "Motion manifest could not be loaded. Using fallback data.";
 }
 
 function bindInput(input, updater) {
