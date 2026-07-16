@@ -103,6 +103,7 @@ const BONE_ALIAS_SLOTS = {
   leftHand: ["lefthand", "left_hand", "hand_l", "l_hand", "leftwrist", "wrist_l"],
   rightHand: ["righthand", "right_hand", "hand_r", "r_hand", "rightwrist", "wrist_r"],
 };
+const BVH_AXIS_CORRECTION = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0, "XYZ"));
 
 function cloneMotionList(list) {
   return list.map((motion) => ({
@@ -1506,6 +1507,14 @@ function snapshotNodeRotation(node) {
   };
 }
 
+function snapshotNodeQuaternion(node) {
+  if (!node) {
+    return null;
+  }
+
+  return node.quaternion.clone();
+}
+
 function captureSourceRestPose(root) {
   const restPose = new Map();
 
@@ -1513,7 +1522,10 @@ function captureSourceRestPose(root) {
     if (!child) {
       return;
     }
-    restPose.set(child.uuid, snapshotNodeRotation(child));
+    restPose.set(child.uuid, {
+      rotation: snapshotNodeRotation(child),
+      quaternion: snapshotNodeQuaternion(child),
+    });
   });
 
   return restPose;
@@ -1524,15 +1536,17 @@ function applySourceRelativeRotation(targetNode, sourceNode, sourceRestPose, ble
     return;
   }
 
-  const targetRest = vrmPreviewRestPose.get(targetNode.uuid)?.rotation ?? snapshotNodeRotation(targetNode);
-  const sourceRest = sourceRestPose?.get(sourceNode.uuid) ?? snapshotNodeRotation(sourceNode);
-  const deltaX = sourceNode.rotation.x - sourceRest.x;
-  const deltaY = sourceNode.rotation.y - sourceRest.y;
-  const deltaZ = sourceNode.rotation.z - sourceRest.z;
+  const targetRest = vrmPreviewRestPose.get(targetNode.uuid)?.quaternion ?? snapshotNodeQuaternion(targetNode);
+  const sourceRest = sourceRestPose?.get(sourceNode.uuid)?.quaternion ?? snapshotNodeQuaternion(sourceNode);
+  const sourceCurrent = snapshotNodeQuaternion(sourceNode);
 
-  targetNode.rotation.x = targetRest.x + deltaX * blend;
-  targetNode.rotation.y = targetRest.y + deltaY * blend;
-  targetNode.rotation.z = targetRest.z + deltaZ * blend;
+  const sourceDelta = sourceRest.clone().invert().multiply(sourceCurrent);
+  const correctedDelta = BVH_AXIS_CORRECTION.clone().multiply(sourceDelta).multiply(BVH_AXIS_CORRECTION.clone().invert());
+  const blendedDelta = new THREE.Quaternion().slerpQuaternions(new THREE.Quaternion(), correctedDelta, blend);
+  const targetCurrent = targetRest.clone().multiply(blendedDelta);
+
+  targetNode.quaternion.copy(targetCurrent);
+  targetNode.rotation.setFromQuaternion(targetCurrent, targetNode.rotation.order);
 }
 
 async function ensureMotionRuntime(motion) {
@@ -1619,6 +1633,7 @@ function capturePreviewRestPose() {
         y: entry.node.rotation.y,
         z: entry.node.rotation.z,
       },
+      quaternion: entry.node.quaternion.clone(),
     });
   }
 }
