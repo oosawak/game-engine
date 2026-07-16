@@ -15,9 +15,8 @@ describe("VRM body and pose data", () => {
     const bodyIds = bodyData.bodies.map((entry: { id: string }) => entry.id);
     const poseIds = poseData.poses.map((entry: { id: string }) => entry.id);
 
-    expect(bodyIds).toContain("vrm_idle_default");
-    expect(poseIds).toContain("vrm_idle_default");
     expect(bodyIds).toEqual(poseIds);
+    expect(bodyIds.every((id: string) => id.startsWith("dataset_"))).toBe(true);
     expect(bodyData.bodies[0]).not.toHaveProperty("boneRotations");
     expect(poseData.poses[0]).not.toHaveProperty("source");
   });

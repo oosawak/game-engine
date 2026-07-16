@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Game Engine Mock - three.js</title>
+  <title>Game Engine Editor - three.js</title>
   <style>
     :root {
       color-scheme: dark;
@@ -41,7 +41,7 @@
 
     body { padding: 18px; }
 
-    .mock {
+    .editor-shell {
       width: 100%;
       height: calc(100vh - 36px);
       border: 1px solid var(--border);
@@ -810,7 +810,7 @@
 
     @media (max-width: 960px) {
       body { padding: 10px; }
-      .mock { min-height: calc(100vh - 20px); grid-template-rows: auto auto auto auto; }
+      .editor-shell { min-height: calc(100vh - 20px); grid-template-rows: auto auto auto auto; }
       .workspace, .footer { grid-template-columns: 1fr; }
       .footer-nav { border-right: 0; border-bottom: 1px solid var(--border); }
       .project-layout { grid-template-columns: 1fr; }
@@ -819,11 +819,11 @@
   </style>
 </head>
 <body>
-  <main class="mock">
+  <main class="editor-shell">
     <header class="topbar">
       <div class="brand">
         <span class="brand-dot"></span>
-        Game Engine Mock
+        Game Engine Editor
       </div>
       <nav class="tabs" aria-label="Editor tabs">
         <button class="tab active" type="button">Scene</button>
@@ -910,16 +910,16 @@
             <details class="property" id="transformProperty" open>
               <summary class="property-header">
                 <span class="property-summary-meta"><span>Transform</span><span class="property-caret">▾</span></span>
-                <span>editable</span>
+                <span>Position / Rotation / Scale</span>
               </summary>
               <div class="axis-grid">
                 <div class="axis-row">
-                  <span class="axis-label">Position</span>
+                  <span class="axis-label" id="positionAxisLabel">Position</span>
                   <div class="axis-controls">
                     <div class="axis-xyz" aria-hidden="true">
                       <span>X</span>
                       <span>Y</span>
-                      <span>Z</span>
+                      <span id="positionAxisZLabel">Z</span>
                     </div>
                     <div class="inputs">
                       <input class="input" id="positionX" type="number" step="0.1" value="0.0" aria-label="Position X" />
@@ -958,6 +958,9 @@
                     </div>
                   </div>
                 </div>
+              </div>
+              <div class="selection-hint" id="transformHint">
+                3D では Z が奥行き、2D では Z がレイヤー順です。
               </div>
             </details>
             <details class="property" id="cameraProperty" open>
@@ -1026,6 +1029,22 @@
                     <input id="pngLockAspect" type="checkbox" checked />
                     Keep fixed
                   </span>
+                </label>
+                <label class="asset-row">
+                  <span>Position X</span>
+                  <input id="pngPosX" class="input" type="number" step="1" value="0" aria-label="PNG Position X" />
+                </label>
+                <label class="asset-row">
+                  <span>Position Y</span>
+                  <input id="pngPosY" class="input" type="number" step="1" value="0" aria-label="PNG Position Y" />
+                </label>
+                <label class="asset-row">
+                  <span>Scale X</span>
+                  <input id="pngScaleX" class="input" type="number" step="0.1" value="1.0" aria-label="PNG Scale X" />
+                </label>
+                <label class="asset-row">
+                  <span>Scale Y</span>
+                  <input id="pngScaleY" class="input" type="number" step="0.1" value="1.0" aria-label="PNG Scale Y" />
                 </label>
                 <label class="asset-row">
                   <span>Z-Index</span>
@@ -1146,7 +1165,7 @@
           <section class="project-info">
             <div class="info-card">
               <div class="info-label">File</div>
-              <div class="info-value">mock/editor-three.html</div>
+              <div class="info-value">docs/editor-three.html</div>
             </div>
             <div class="info-card">
               <div class="info-label">Engine</div>
@@ -1303,6 +1322,9 @@
     const modeStatus = document.getElementById("modeStatus");
     const selectionBadge = document.getElementById("selectionBadge");
     const inspectorObjectName = document.getElementById("inspectorObjectName");
+    const transformHint = document.getElementById("transformHint");
+    const positionAxisLabel = document.getElementById("positionAxisLabel");
+    const positionAxisZLabel = document.getElementById("positionAxisZLabel");
     const statusText = document.getElementById("statusText");
     const fpsValue = document.getElementById("fpsValue");
     const fpsOverlay = document.getElementById("fpsOverlay");
@@ -1312,6 +1334,10 @@
     const pngMode = document.getElementById("pngMode");
     const pngPreview = document.getElementById("pngPreview");
     const pngLockAspect = document.getElementById("pngLockAspect");
+    const pngPosX = document.getElementById("pngPosX");
+    const pngPosY = document.getElementById("pngPosY");
+    const pngScaleX = document.getElementById("pngScaleX");
+    const pngScaleY = document.getElementById("pngScaleY");
     const pngZIndexInput = document.getElementById("pngZIndexInput");
     const pngFileInput = document.getElementById("pngFileInput");
     const pngUrlInput = document.getElementById("pngUrlInput");
@@ -2611,6 +2637,24 @@ object.rotation.y = angle * 57.2957795;`;
         if (isImageObject(object) && object.preserveAspectRatio) {
           applyPngAspectRatio(object, axis);
         }
+      } else if (object.type === "PNG" && inputId.startsWith("png")) {
+        if (inputId === "pngPosX") {
+          object.position.x = value;
+        } else if (inputId === "pngPosY") {
+          object.position.y = value;
+        } else if (inputId === "pngScaleX") {
+          object.scale.x = Math.max(0.1, value);
+          if (object.preserveAspectRatio) {
+            applyPngAspectRatio(object, "x");
+          }
+        } else if (inputId === "pngScaleY") {
+          object.scale.y = Math.max(0.1, value);
+          if (object.preserveAspectRatio) {
+            applyPngAspectRatio(object, "y");
+          }
+        } else if (inputId === "pngZIndexInput") {
+          object.position.z = value;
+        }
       } else if (object.type === "Camera" && inputId === "cameraFovInput") {
         object.cameraFov = clamp(value, 1, 179);
         if (object.gameCamera) {
@@ -2870,10 +2914,21 @@ object.rotation.y = angle * 57.2957795;`;
 
     function syncInspector() {
       const object = getSelectedObject();
+      if (positionAxisLabel) {
+        positionAxisLabel.textContent = state.mode === "2d" ? "Position / Layer" : "Position";
+      }
+      if (positionAxisZLabel) {
+        positionAxisZLabel.textContent = state.mode === "2d" ? "Layer" : "Z";
+      }
       if (!object) {
         inspectorObjectName.textContent = "None";
         selectionBadge.textContent = "Selection: none";
         scriptMode.textContent = "no object selected";
+        if (transformHint) {
+          transformHint.textContent = state.mode === "2d"
+            ? "2D では Z がレイヤー順です。X / Y を中心に配置します。"
+            : "3D では Z が奥行きです。X / Y / Z を均等に編集します。";
+        }
         updateInspectorLayout(null);
         closeAdvmngEditor();
         return;
@@ -2883,6 +2938,11 @@ object.rotation.y = angle * 57.2957795;`;
       inspectorObjectName.textContent = object.name;
       selectionBadge.textContent = `Selection: ${object.name}`;
       scriptMode.textContent = `script for ${object.name} (${object.typeLabel ?? object.type})`;
+      if (transformHint) {
+        transformHint.textContent = state.mode === "2d"
+          ? "2D では Z がレイヤー順です。X / Y を中心に配置します。"
+          : "3D では Z が奥行きです。X / Y / Z を均等に編集します。";
+      }
       inputs.positionX.value = object.position.x.toFixed(1);
       inputs.positionY.value = object.position.y.toFixed(1);
       inputs.positionZ.value = object.position.z.toFixed(1);
@@ -2900,6 +2960,10 @@ object.rotation.y = angle * 57.2957795;`;
       lightMode.textContent = object.type === "Light" ? "Scene light" : "scene light";
       if (isImage && !isAdvmngObject(object)) {
         pngLockAspect.checked = Boolean(object.preserveAspectRatio);
+        pngPosX.value = object.position.x.toFixed(1);
+        pngPosY.value = object.position.y.toFixed(1);
+        pngScaleX.value = object.scale.x.toFixed(1);
+        pngScaleY.value = object.scale.y.toFixed(1);
         pngZIndexInput.value = object.position.z.toFixed(1);
         pngPreview.replaceChildren();
         if (object.textureUrl) {
@@ -3442,6 +3506,10 @@ object.rotation.y = angle * 57.2957795;`;
     });
 
     [
+      pngPosX,
+      pngPosY,
+      pngScaleX,
+      pngScaleY,
       advmngPosX,
       advmngPosY,
       advmngScaleX,

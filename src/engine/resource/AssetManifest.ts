@@ -7,6 +7,10 @@ export type AssetKind =
   | "sprite-animation"
   | "vrm"
   | "vrm-motion"
+  | "splat"
+  | "model"
+  | "collider"
+  | "streaming"
   | "prefab"
   | "unknown";
 
@@ -172,6 +176,10 @@ function normalizeKind(value: unknown): AssetKind {
     "sprite-animation",
     "vrm",
     "vrm-motion",
+    "splat",
+    "model",
+    "collider",
+    "streaming",
     "prefab",
     "unknown",
   ];

@@ -4,6 +4,7 @@
     "idle",
     "loop",
     "locomotion",
+    "movement",
     "gesture",
     "emote",
     "default",
@@ -15,64 +16,92 @@
   ],
   "motions": [
     {
-      "id": "vrm_idle_default",
-      "alias": "待機",
-      "displayName": "Idle / Wait",
-      "source": "motions/idle.vrma",
-      "tags": ["idle", "loop", "default", "safe"],
-      "priority": 10,
-      "loop": true,
-      "duration": "00:12"
-    },
-    {
-      "id": "motion_walk_normal",
-      "alias": "歩き",
-      "displayName": "Walk",
-      "source": "motions/walk.glb",
-      "tags": ["loop", "locomotion", "movement"],
-      "priority": 30,
-      "loop": true,
-      "duration": "00:08"
-    },
-    {
-      "id": "motion_run_fast",
-      "alias": "走り",
-      "displayName": "Run",
-      "source": "motions/run.glb",
-      "tags": ["loop", "locomotion", "movement"],
-      "priority": 35,
-      "loop": true,
-      "duration": "00:06"
-    },
-    {
-      "id": "motion_bow_polite",
+      "id": "dataset_bow_active_001",
       "alias": "おじぎ",
-      "displayName": "Bow",
-      "source": "motions/bow.vrma",
+      "scriptName": "dataset_bow_active_001",
+      "displayName": "Bow Active",
+      "source": "https://raw.githubusercontent.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset/master/dataset/Bandai-Namco-Research-Motiondataset-1/data/dataset-1_bow_active_001.bvh",
       "tags": ["gesture", "once", "pose"],
       "priority": 50,
       "loop": false,
-      "duration": "00:03"
+      "duration": "00:03",
+      "boneRotations": [
+        { "bone": "spine", "rotation": [16, 0, 0] },
+        { "bone": "head", "rotation": [7, 0, 0] }
+      ],
+      "expressionAdjustments": [
+        { "name": "respectful", "weight": 1 }
+      ],
+      "fingerAdjustments": [
+        { "hand": "left", "pose": "open", "weight": 0.8 },
+        { "hand": "right", "pose": "open", "weight": 0.8 }
+      ]
     },
     {
-      "id": "motion_wave_right",
-      "alias": "挨拶",
-      "displayName": "Wave",
-      "source": "motions/wave.vrma",
-      "tags": ["emote", "once", "reaction"],
-      "priority": 45,
+      "id": "dataset_bow_happy_001",
+      "alias": "おじぎ",
+      "scriptName": "dataset_bow_happy_001",
+      "displayName": "Bow Happy",
+      "source": "https://raw.githubusercontent.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset/master/dataset/Bandai-Namco-Research-Motiondataset-1/data/dataset-1_bow_happy_001.bvh",
+      "tags": ["gesture", "once", "pose", "happy"],
+      "priority": 49,
       "loop": false,
-      "duration": "00:04"
+      "duration": "00:03",
+      "boneRotations": [
+        { "bone": "spine", "rotation": [15, 0, 0] },
+        { "bone": "head", "rotation": [6, 0, 0] }
+      ],
+      "expressionAdjustments": [
+        { "name": "happy", "weight": 1 }
+      ],
+      "fingerAdjustments": [
+        { "hand": "left", "pose": "open", "weight": 0.9 },
+        { "hand": "right", "pose": "open", "weight": 0.9 }
+      ]
     },
     {
-      "id": "motion_attack_light",
-      "alias": "攻撃",
-      "displayName": "Attack",
-      "source": "motions/attack.glb",
-      "tags": ["combat", "once", "reaction"],
-      "priority": 70,
+      "id": "dataset_bye_active_001",
+      "alias": "さようなら",
+      "scriptName": "dataset_bye_active_001",
+      "displayName": "Bye Active",
+      "source": "https://raw.githubusercontent.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset/master/dataset/Bandai-Namco-Research-Motiondataset-1/data/dataset-1_bye_active_001.bvh",
+      "tags": ["gesture", "once", "reaction"],
+      "priority": 52,
       "loop": false,
-      "duration": "00:05"
+      "duration": "00:03",
+      "boneRotations": [
+        { "bone": "rightArm", "rotation": [0, 0, 41] },
+        { "bone": "spine", "rotation": [0, 0, 0] }
+      ],
+      "expressionAdjustments": [
+        { "name": "neutral", "weight": 1 }
+      ],
+      "fingerAdjustments": [
+        { "hand": "left", "pose": "open", "weight": 0.8 },
+        { "hand": "right", "pose": "open", "weight": 1 }
+      ]
+    },
+    {
+      "id": "dataset_bye_happy_001",
+      "alias": "さようなら",
+      "scriptName": "dataset_bye_happy_001",
+      "displayName": "Bye Happy",
+      "source": "https://raw.githubusercontent.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset/master/dataset/Bandai-Namco-Research-Motiondataset-1/data/dataset-1_bye_happy_001.bvh",
+      "tags": ["gesture", "once", "reaction", "happy"],
+      "priority": 53,
+      "loop": false,
+      "duration": "00:03",
+      "boneRotations": [
+        { "bone": "rightArm", "rotation": [0, 0, 36] },
+        { "bone": "spine", "rotation": [0, 0, 0] }
+      ],
+      "expressionAdjustments": [
+        { "name": "happy", "weight": 1 }
+      ],
+      "fingerAdjustments": [
+        { "hand": "left", "pose": "open", "weight": 0.8 },
+        { "hand": "right", "pose": "open", "weight": 1 }
+      ]
     }
   ]
 }

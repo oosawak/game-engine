@@ -11,15 +11,15 @@ describe("Asset manifest", () => {
       version: "1.0",
       assets: [
         {
-          id: "vrm_idle_default",
+          id: "dataset_bow_active_001",
           kind: "vrm-motion",
-          source: "motions/idle.vrma",
-          alias: ["待機", "idle"],
-          scriptName: "idle_motion",
-          tags: ["loop", "neutral"],
+          source: "https://raw.githubusercontent.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset/master/dataset/Bandai-Namco-Research-Motiondataset-1/data/dataset-1_bow_active_001.bvh",
+          alias: ["おじぎ", "bow"],
+          scriptName: "dataset_bow_active_001",
+          tags: ["gesture", "one-shot", "pose"],
           meta: {
-            duration: 12,
-            loop: true,
+            duration: 3,
+            loop: false,
           },
         },
         {
@@ -32,9 +32,9 @@ describe("Asset manifest", () => {
     });
 
     expect(manifest.id).toBe("shared-assets");
-    expect(manifest.getAsset("vrm_idle_default")?.scriptName).toBe("idle_motion");
-    expect(manifest.findByAlias("待機")?.id).toBe("vrm_idle_default");
-    expect(manifest.findByTag("loop")).toHaveLength(1);
+    expect(manifest.getAsset("dataset_bow_active_001")?.scriptName).toBe("dataset_bow_active_001");
+    expect(manifest.findByAlias("おじぎ")?.id).toBe("dataset_bow_active_001");
+    expect(manifest.findByTag("one-shot")).toHaveLength(1);
     expect(manifest.findByKind("image")).toHaveLength(1);
     expect(manifest.toJSON().assets).toHaveLength(2);
   });
@@ -48,6 +48,15 @@ describe("Asset manifest", () => {
     expect(manifest.findByKind("audio")).toHaveLength(1);
     expect(manifest.findByKind("scene")).toHaveLength(2);
     expect(manifest.findByAlias("field_bgm")?.id).toBe("audio_bgm_field");
+  });
+
+  it("accepts Mint asset kinds in the shared manifest format", async () => {
+    const source = await readFile(join(process.cwd(), "docs", "mint-assets.json"), "utf8");
+    const manifest = AssetManifest.fromJSON(JSON.parse(source));
+
+    expect(manifest.findByKind("splat")).toHaveLength(1);
+    expect(manifest.findByKind("model")).toHaveLength(1);
+    expect(manifest.findByAlias("ミントワールド")?.id).toBe("mint_world_splat");
   });
 
   it("loads shared asset manifests through the resource manager", async () => {

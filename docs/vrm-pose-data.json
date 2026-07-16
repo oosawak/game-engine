@@ -3,53 +3,27 @@
   "version": "1.0",
   "poses": [
     {
-      "id": "vrm_idle_default",
+      "id": "dataset_bow_active_001",
       "boneRotations": [
-        { "bone": "hips", "rotation": [0, 0, 0] },
-        { "bone": "spine", "rotation": [0, 0, 0] }
-      ],
-      "expressionAdjustments": [
-        { "name": "neutral", "weight": 0.8 },
-        { "name": "happy", "weight": 0.2 }
-      ],
-      "fingerAdjustments": [
-        { "hand": "left", "pose": "relaxed", "weight": 0.6 },
-        { "hand": "right", "pose": "relaxed", "weight": 0.6 }
-      ]
-    },
-    {
-      "id": "motion_walk_normal",
-      "boneRotations": [
-        { "bone": "hips", "rotation": [0, 4, 0] }
-      ],
-      "expressionAdjustments": [
-        { "name": "neutral", "weight": 1 }
-      ],
-      "fingerAdjustments": [
-        { "hand": "left", "pose": "open", "weight": 0.4 },
-        { "hand": "right", "pose": "open", "weight": 0.4 }
-      ]
-    },
-    {
-      "id": "motion_run_fast",
-      "boneRotations": [
-        { "bone": "hips", "rotation": [0, 8, 0] }
-      ],
-      "expressionAdjustments": [
-        { "name": "focused", "weight": 0.9 }
-      ],
-      "fingerAdjustments": [
-        { "hand": "left", "pose": "closed", "weight": 0.5 },
-        { "hand": "right", "pose": "closed", "weight": 0.5 }
-      ]
-    },
-    {
-      "id": "motion_bow_polite",
-      "boneRotations": [
-        { "bone": "spine", "rotation": [18, 0, 0] }
+        { "bone": "spine", "rotation": [16, 0, 0] },
+        { "bone": "head", "rotation": [7, 0, 0] }
       ],
       "expressionAdjustments": [
         { "name": "respectful", "weight": 1 }
+      ],
+      "fingerAdjustments": [
+        { "hand": "left", "pose": "open", "weight": 0.8 },
+        { "hand": "right", "pose": "open", "weight": 0.8 }
+      ]
+    },
+    {
+      "id": "dataset_bow_happy_001",
+      "boneRotations": [
+        { "bone": "spine", "rotation": [15, 0, 0] },
+        { "bone": "head", "rotation": [6, 0, 0] }
+      ],
+      "expressionAdjustments": [
+        { "name": "happy", "weight": 1 }
       ],
       "fingerAdjustments": [
         { "hand": "left", "pose": "open", "weight": 0.9 },
@@ -57,30 +31,31 @@
       ]
     },
     {
-      "id": "motion_wave_right",
+      "id": "dataset_bye_active_001",
       "boneRotations": [
-        { "bone": "rightUpperArm", "rotation": [0, 0, 42] }
+        { "bone": "rightArm", "rotation": [0, 0, 41] },
+        { "bone": "spine", "rotation": [0, 0, 0] }
+      ],
+      "expressionAdjustments": [
+        { "name": "neutral", "weight": 1 }
+      ],
+      "fingerAdjustments": [
+        { "hand": "left", "pose": "open", "weight": 0.8 },
+        { "hand": "right", "pose": "open", "weight": 1 }
+      ]
+    },
+    {
+      "id": "dataset_bye_happy_001",
+      "boneRotations": [
+        { "bone": "rightArm", "rotation": [0, 0, 36] },
+        { "bone": "spine", "rotation": [0, 0, 0] }
       ],
       "expressionAdjustments": [
         { "name": "happy", "weight": 1 }
       ],
       "fingerAdjustments": [
-        { "hand": "left", "pose": "open", "weight": 0.7 },
-        { "hand": "right", "pose": "wave", "weight": 1 }
-      ]
-    },
-    {
-      "id": "motion_attack_light",
-      "boneRotations": [
-        { "bone": "rightUpperArm", "rotation": [0, 0, 55] },
-        { "bone": "spine", "rotation": [10, 0, 0] }
-      ],
-      "expressionAdjustments": [
-        { "name": "angry", "weight": 0.9 }
-      ],
-      "fingerAdjustments": [
-        { "hand": "left", "pose": "grip", "weight": 1 },
-        { "hand": "right", "pose": "grip", "weight": 1 }
+        { "hand": "left", "pose": "open", "weight": 0.8 },
+        { "hand": "right", "pose": "open", "weight": 1 }
       ]
     }
   ]

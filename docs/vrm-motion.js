@@ -1,25 +1,11 @@
 const STORAGE_KEY = "game-engine.vrm-editor.v1";
-const BODY_MANIFEST_SOURCES = ["./vrm-body-data.json", "./shared-assets.json", "./vrm-editor-data.json"];
-const POSE_MANIFEST_SOURCES = ["./vrm-pose-data.json", "./vrm-editor-data.json"];
+const BODY_MANIFEST_SOURCES = ["./vrm-motion-dataset.json"];
+const POSE_MANIFEST_SOURCES = ["./vrm-motion-dataset.json"];
 const DEFAULT_TAGS = ["", "idle", "loop", "locomotion", "movement", "gesture", "emote", "default", "safe", "once", "reaction", "combat", "pose"];
 
-const DEFAULT_BODY_MOTIONS = [
-  { id: "vrm_idle_default", alias: "待機", scriptName: "vrm_idle_default", displayName: "Idle / Wait", source: "motions/idle.vrma", tags: ["idle", "loop", "default", "safe"], priority: 10, loop: true, duration: "00:12", boneRotations: [{ bone: "hips", rotation: [0, 0, 0] }, { bone: "spine", rotation: [0, 0, 0] }], expressionAdjustments: [{ name: "neutral", weight: 0.8 }, { name: "happy", weight: 0.2 }], fingerAdjustments: [{ hand: "left", pose: "relaxed", weight: 0.6 }, { hand: "right", pose: "relaxed", weight: 0.6 }] },
-  { id: "motion_walk_normal", alias: "歩き", scriptName: "motion_walk_normal", displayName: "Walk", source: "motions/walk.glb", tags: ["loop", "locomotion", "movement"], priority: 30, loop: true, duration: "00:08", boneRotations: [{ bone: "hips", rotation: [0, 4, 0] }], expressionAdjustments: [{ name: "neutral", weight: 1 }], fingerAdjustments: [{ hand: "left", pose: "open", weight: 0.4 }, { hand: "right", pose: "open", weight: 0.4 }] },
-  { id: "motion_run_fast", alias: "走り", scriptName: "motion_run_fast", displayName: "Run", source: "motions/run.glb", tags: ["loop", "locomotion", "movement"], priority: 35, loop: true, duration: "00:06", boneRotations: [{ bone: "hips", rotation: [0, 8, 0] }], expressionAdjustments: [{ name: "focused", weight: 0.9 }], fingerAdjustments: [{ hand: "left", pose: "closed", weight: 0.5 }, { hand: "right", pose: "closed", weight: 0.5 }] },
-  { id: "motion_bow_polite", alias: "おじぎ", scriptName: "motion_bow_polite", displayName: "Bow", source: "motions/bow.vrma", tags: ["gesture", "once", "pose"], priority: 50, loop: false, duration: "00:03", boneRotations: [{ bone: "spine", rotation: [18, 0, 0] }], expressionAdjustments: [{ name: "respectful", weight: 1 }], fingerAdjustments: [{ hand: "left", pose: "open", weight: 0.9 }, { hand: "right", pose: "open", weight: 0.9 }] },
-  { id: "motion_wave_right", alias: "挨拶", scriptName: "motion_wave_right", displayName: "Wave", source: "motions/wave.vrma", tags: ["emote", "once", "reaction"], priority: 45, loop: false, duration: "00:04", boneRotations: [{ bone: "rightUpperArm", rotation: [0, 0, 42] }], expressionAdjustments: [{ name: "happy", weight: 1 }], fingerAdjustments: [{ hand: "left", pose: "open", weight: 0.7 }, { hand: "right", pose: "wave", weight: 1 }] },
-  { id: "motion_attack_light", alias: "攻撃", scriptName: "motion_attack_light", displayName: "Attack", source: "motions/attack.glb", tags: ["combat", "once", "reaction"], priority: 70, loop: false, duration: "00:05", boneRotations: [{ bone: "rightUpperArm", rotation: [0, 0, 55] }, { bone: "spine", rotation: [10, 0, 0] }], expressionAdjustments: [{ name: "angry", weight: 0.9 }], fingerAdjustments: [{ hand: "left", pose: "grip", weight: 1 }, { hand: "right", pose: "grip", weight: 1 }] },
-];
+const DEFAULT_BODY_MOTIONS = [];
 
-const DEFAULT_POSE_DATA = [
-  { id: "vrm_idle_default", boneRotations: [{ bone: "hips", rotation: [0, 0, 0] }, { bone: "spine", rotation: [0, 0, 0] }], expressionAdjustments: [{ name: "neutral", weight: 0.8 }, { name: "happy", weight: 0.2 }], fingerAdjustments: [{ hand: "left", pose: "relaxed", weight: 0.6 }, { hand: "right", pose: "relaxed", weight: 0.6 }] },
-  { id: "motion_walk_normal", boneRotations: [{ bone: "hips", rotation: [0, 4, 0] }], expressionAdjustments: [{ name: "neutral", weight: 1 }], fingerAdjustments: [{ hand: "left", pose: "open", weight: 0.4 }, { hand: "right", pose: "open", weight: 0.4 }] },
-  { id: "motion_run_fast", boneRotations: [{ bone: "hips", rotation: [0, 8, 0] }], expressionAdjustments: [{ name: "focused", weight: 0.9 }], fingerAdjustments: [{ hand: "left", pose: "closed", weight: 0.5 }, { hand: "right", pose: "closed", weight: 0.5 }] },
-  { id: "motion_bow_polite", boneRotations: [{ bone: "spine", rotation: [18, 0, 0] }], expressionAdjustments: [{ name: "respectful", weight: 1 }], fingerAdjustments: [{ hand: "left", pose: "open", weight: 0.9 }, { hand: "right", pose: "open", weight: 0.9 }] },
-  { id: "motion_wave_right", boneRotations: [{ bone: "rightUpperArm", rotation: [0, 0, 42] }], expressionAdjustments: [{ name: "happy", weight: 1 }], fingerAdjustments: [{ hand: "left", pose: "open", weight: 0.7 }, { hand: "right", pose: "wave", weight: 1 }] },
-  { id: "motion_attack_light", boneRotations: [{ bone: "rightUpperArm", rotation: [0, 0, 55] }, { bone: "spine", rotation: [10, 0, 0] }], expressionAdjustments: [{ name: "angry", weight: 0.9 }], fingerAdjustments: [{ hand: "left", pose: "grip", weight: 1 }, { hand: "right", pose: "grip", weight: 1 }] },
-];
+const DEFAULT_POSE_DATA = [];
 
 const state = {
   selectedId: "",
@@ -39,10 +25,13 @@ let tags = [...DEFAULT_TAGS];
 let baseBodyMotions = cloneBodyList(DEFAULT_BODY_MOTIONS);
 let basePoseData = clonePoseList(DEFAULT_POSE_DATA);
 const PRESET_POSES = {
-  idle: { label: "Idle / Wait", templateId: "vrm_idle_default" },
-  bow: { label: "Bow", templateId: "motion_bow_polite" },
-  wave: { label: "Wave", templateId: "motion_wave_right" },
-  attack: { label: "Attack", templateId: "motion_attack_light" },
+  guide: { label: "Guide Normal", templateId: "dataset_guide_normal_001" },
+  walk: { label: "Walk Normal", templateId: "dataset_walk_normal_001" },
+  run: { label: "Run Active", templateId: "dataset_run_active_001" },
+  dash: { label: "Dash Active", templateId: "dataset_dash_active_001" },
+  bow: { label: "Bow Normal", templateId: "dataset_bow_normal_001" },
+  bye: { label: "Bye Normal", templateId: "dataset_bye_normal_001" },
+  dance: { label: "Dance Musical", templateId: "dataset_dance_musical_001" },
 };
 
 function cloneBodyList(list) {
@@ -167,6 +156,8 @@ function normalizeMotion(raw, index) {
       : "";
   const scriptName = typeof raw.scriptName === "string" && raw.scriptName.trim() ? raw.scriptName.trim() : id;
   const displayName = typeof raw.displayName === "string" && raw.displayName.trim() ? raw.displayName.trim() : alias || id;
+  const content = typeof raw.content === "string" && raw.content.trim() ? raw.content.trim() : "";
+  const style = typeof raw.style === "string" && raw.style.trim() ? raw.style.trim() : "";
   const source = typeof raw.source === "string" && raw.source.trim() ? raw.source.trim() : "unknown";
   const tagsValue = Array.isArray(raw.tags) ? raw.tags.filter((tag) => typeof tag === "string" && tag.trim()) : [];
   const priority = Number.isFinite(Number(raw.priority)) ? Number(raw.priority) : 0;
@@ -181,6 +172,8 @@ function normalizeMotion(raw, index) {
     alias,
     scriptName,
     displayName,
+    content,
+    style,
     source,
     tags: [...tagsValue],
     priority,
@@ -215,6 +208,8 @@ function extractBodyEntries(rawData) {
         displayName: typeof asset.meta?.displayName === "string" && asset.meta.displayName.trim()
           ? asset.meta.displayName.trim()
           : asset.scriptName ?? asset.id,
+        content: typeof asset.content === "string" ? asset.content : "",
+        style: typeof asset.style === "string" ? asset.style : "",
         source: asset.source,
         tags: asset.tags,
         priority: asset.meta?.priority,
@@ -362,6 +357,8 @@ function applyMotionSnapshot(target, snapshot) {
   target.alias = snapshot.alias;
   target.scriptName = snapshot.scriptName;
   target.displayName = snapshot.displayName;
+  target.content = snapshot.content;
+  target.style = snapshot.style;
   target.source = snapshot.source;
   target.tags = [...snapshot.tags];
   target.priority = snapshot.priority;
@@ -506,7 +503,7 @@ function matchesMotion(motion) {
   if (!query) {
     return true;
   }
-  return [motion.id, motion.alias, motion.scriptName, motion.displayName, motion.source, motion.tags.join(" ")]
+  return [motion.id, motion.alias, motion.scriptName, motion.displayName, motion.content, motion.style, motion.source, motion.tags.join(" ")]
     .join(" ")
     .toLowerCase()
     .includes(query);
@@ -553,7 +550,7 @@ function renderList() {
     card.className = `motion-card${motion.id === state.selectedId ? " active" : ""}`;
     card.innerHTML = `
       <div class="motion-title"><span>${motion.displayName}</span><span>${motion.id}</span></div>
-      <div class="motion-subtitle">${motion.alias || "No alias"} · ${motion.scriptName}</div>
+      <div class="motion-subtitle">${motion.alias || "No alias"}${motion.content || motion.style ? ` · ${[motion.content, motion.style].filter(Boolean).join(" / ")}` : ""} · ${motion.scriptName}</div>
       <div class="tag-row">${motion.tags.map((tag) => `<span class="mini-chip">${tag}</span>`).join("")}</div>
     `;
     card.addEventListener("click", () => {
@@ -573,7 +570,7 @@ function renderDetails() {
   refs.overlayId.textContent = motion.id;
   refs.overlayScriptName.textContent = motion.scriptName;
   refs.playingLabel.textContent = `Playing: ${state.playing}`;
-  refs.presetPose.value = Object.entries(PRESET_POSES).find(([, preset]) => preset.templateId === motion.id)?.[0] ?? "idle";
+  refs.presetPose.value = Object.entries(PRESET_POSES).find(([, preset]) => preset.templateId === motion.id)?.[0] ?? "guide";
   refs.detailId.textContent = motion.id;
   refs.detailScriptName.value = motion.scriptName;
   refs.detailAlias.value = motion.alias;

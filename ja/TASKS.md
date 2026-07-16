@@ -134,15 +134,15 @@
 ## Phase 13: Editor UI 統一
 
 - [ ] Inspector の共通レイアウト規約を実装に反映する
-- [ ] `Position / Rotation / Scale` の表示形式を統一する
-- [ ] 2D 用項目と 3D 用項目の見せ方を分ける
-- [ ] `Scene View` と `Game View` のタブ切り替えを実装する
-- [ ] `Game View` に実行中の状態を表示する
-- [ ] PNG と ADVMNG の設定 UI を同じ部品で構成する
-- [ ] 画面全体のスクロールをなくし、内部スクロールに限定する
-- [ ] Scene View の高さと配置を FullHD 基準で調整する
-- [ ] ADVMNG の子 PNG を親子関係として扱う UI を整備する
-- [ ] UI 規約に反する新規追加を防ぐためのレビュー観点を追記する
+- [x] `Position / Rotation / Scale` の表示形式を統一する
+- [x] 2D 用項目と 3D 用項目の見せ方を分ける
+- [x] `Scene View` と `Game View` のタブ切り替えを実装する
+- [x] `Game View` に実行中の状態を表示する
+- [x] PNG と ADVMNG の設定 UI を同じ部品で構成する
+- [x] 画面全体のスクロールをなくし、内部スクロールに限定する
+- [x] Scene View の高さと配置を FullHD 基準で調整する
+- [ ] ADVMNG の子アセットを親子関係として扱う UI を整備する
+- [x] UI 規約に反する新規追加を防ぐためのレビュー観点を追記する
 
 ## Phase 14: 出力と公開
 
@@ -160,11 +160,13 @@
 - [x] VRM Editor の左ペインにモーション一覧を表示する
 - [x] VRM Editor の中央ペインにプレビューと再生制御を表示する
 - [x] VRM Editor の右ペインに名前編集と詳細設定を表示する
+- [x] VRM Motion Detail を VRM Editor の右ペインへ統合する
 - [x] 標準ポーズを `Idle / Wait` として定義する
 - [x] `Reset Pose` を実装する
 - [x] `Preset Pose` の選択を実装する
 - [x] モーションの `id` と `alias` を登録できるようにする
 - [x] スクリプトからは `id` で参照し、`alias` でも検索できるようにする
+- [ ] VRM をファイルまたは URL から読み込めるようにする
 - [x] VRM Editor でモーション一覧と名前編集欄を表示する
 - [x] 骨ごとの回転を JSON で保存・読込できるようにする
 - [x] 表情や手指の調整を拡張項目として追加する
@@ -174,17 +176,17 @@
 
 ## Phase 16: Mint MCP Integration
 
-- [ ] `MintMcpAdapter` を設計する
-- [ ] `MintAssetProvider` の抽象を定義する
-- [ ] 生成アセットの JSON マニフェスト形式を定義する
-- [ ] Gaussian Splat の読み込み方針を定義する
-- [ ] GLTF / GLB の読み込み方針を定義する
-- [ ] Collider メタデータの受け取り方を定義する
-- [ ] Streaming 情報の扱いを定義する
-- [ ] 失敗時のフォールバックデータを定義する
+- [x] `MintMcpAdapter` を設計する
+- [x] `MintAssetProvider` の抽象を定義する
+- [x] 生成アセットの JSON マニフェスト形式を定義する
+- [x] Gaussian Splat の読み込み方針を定義する
+- [x] GLTF / GLB の読み込み方針を定義する
+- [x] Collider メタデータの受け取り方を定義する
+- [x] Streaming 情報の扱いを定義する
+- [x] 失敗時のフォールバックデータを定義する
 - [x] `docs` に Mint 由来アセット確認ページを追加する
 - [x] `mint-threejs-skills` の役割を README に明記する
-- [ ] エンジンコアが Mint 非依存で動くことを確認する
+- [x] エンジンコアが Mint 非依存で動くことを確認する
 
 ## Phase 17: 共通アセットパイプライン
 
@@ -198,6 +200,21 @@
 - [x] 共通アセット形式の説明を `ja/DESIGN.md` に追加する
 - [x] 共通アセットの利用方針を `ja/REQUIREMENTS.md` に追記する
 - [x] `docs` に共通アセットのサンプル JSON を追加する
+
+## Phase 18: VRM Motion Runtime
+
+- [ ] 標準 VRM の配置先を `docs/assets/vrm/standard/` に固定する
+- [ ] 編集元が必要な場合の原本置き場を `assets/vrm/standard/` に分ける
+- [ ] VRM Editor が標準 VRM を優先読み込みできるようにする
+- [ ] VRM の再生を筒モデルではなく実 clip 再生に切り替える
+- [ ] VRM モーションを `AnimationClip` へ正規化する
+- [ ] VRM の humanoid bone への retarget を実装する
+- [ ] `Play / Stop / Loop / Seek` を実 clip 再生に対して動かす
+- [ ] `Bone Mapping` を手動補助 UI として整理する
+- [ ] 骨名一覧を表示し、選択骨をプレビュー上で強調できるようにする
+- [ ] VRM の読み込み後に標準ポーズと実モーションの両方を確認できるようにする
+- [ ] モーション再生の単体テストを追加する
+- [ ] 標準 VRM とモーション定義の JSON サンプルを `docs` に追加する
 
 ## Mint Integration MVP 定義
 
@@ -246,6 +263,8 @@
 - VRM の標準ポーズが待機ポーズとして定義されている
 - モーションの `id` と `alias` の運用方針が明文化されている
 - VRM Editor の画面構成が明文化されている
+- 標準 VRM の配置先が `docs/assets/vrm/standard/` として明文化されている
+- VRM モーションが実 clip 再生として動作する方針が明文化されている
 - ライフサイクル順序が正しい
 - 破棄済みオブジェクトが更新されない
 - テストが通る
@@ -266,3 +285,4 @@
 11. Editor UI 統一
 12. 出力と公開
 13. VRM Pose Editor
+14. VRM Motion Runtime

@@ -3,29 +3,29 @@
   "version": "1.0",
   "assets": [
     {
-      "id": "vrm_idle_default",
+      "id": "dataset_bow_active_001",
       "kind": "vrm-motion",
-      "source": "motions/idle.vrma",
-      "alias": ["待機", "idle"],
-      "scriptName": "vrm_idle_default",
-      "tags": ["loop", "neutral", "default"],
+      "source": "https://raw.githubusercontent.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset/master/dataset/Bandai-Namco-Research-Motiondataset-1/data/dataset-1_bow_active_001.bvh",
+      "alias": ["おじぎ", "bow"],
+      "scriptName": "dataset_bow_active_001",
+      "tags": ["gesture", "one-shot", "pose"],
       "meta": {
-        "priority": 10,
-        "loop": true,
-        "duration": 12
+        "priority": 50,
+        "loop": false,
+        "duration": 3
       }
     },
     {
-      "id": "vrm_wave",
+      "id": "dataset_bye_active_001",
       "kind": "vrm-motion",
-      "source": "motions/wave.vrma",
-      "alias": ["wave", "挨拶"],
-      "scriptName": "vrm_wave",
-      "tags": ["gesture", "one-shot"],
+      "source": "https://raw.githubusercontent.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset/master/dataset/Bandai-Namco-Research-Motiondataset-1/data/dataset-1_bye_active_001.bvh",
+      "alias": ["さようなら", "bye"],
+      "scriptName": "dataset_bye_active_001",
+      "tags": ["gesture", "one-shot", "reaction"],
       "meta": {
-        "priority": 40,
+        "priority": 52,
         "loop": false,
-        "duration": 3.2
+        "duration": 3
       }
     },
     {

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="refresh" content="0; url=./editor-three.html" />
+  <title>Game Engine Editor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1016;
+      --panel: #121824;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e7edf8;
+      --muted: #8f9bb0;
+      --accent: #6cc1ff;
+      --accent-2: #7cf0b7;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --font: "Avenir Next", "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(108, 193, 255, 0.12), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(124, 240, 183, 0.09), transparent 30%),
+        linear-gradient(180deg, #0b0e14 0%, #101421 100%);
+      color: var(--text);
+      font-family: var(--font);
+    }
+    body {
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(760px, 100%);
+      padding: 28px;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)), var(--panel);
+      box-shadow: var(--shadow);
+      display: grid;
+      gap: 14px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(108, 193, 255, 0.12);
+      border: 1px solid rgba(108, 193, 255, 0.24);
+      font-size: 12px;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+    h1 { margin: 0; font-size: 28px; }
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    a {
+      color: var(--text);
+      text-decoration: none;
+    }
+    .links {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+    .link {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="badge"><span class="dot"></span> Editor</div>
+    <h1>Game Engine Editor</h1>
+    <p>正式な Editor 入口です。`editor-three.html` へ移動します。</p>
+    <div class="links">
+      <a class="link" href="./editor-three.html">Open Editor</a>
+      <a class="link" href="./index.html">Back to Home</a>
+    </div>
+  </main>
+</body>
+</html>

@@ -4,6 +4,13 @@
   "provider": "Mint MCP",
   "client": "mint-threejs-skills",
   "description": "Mint MCP 由来の生成アセットを Three.js 側で参照するための確認データ。",
+  "fallback": {
+    "manifestId": "mint-assets-fallback",
+    "assetId": "mint_world_fallback",
+    "kind": "model",
+    "source": "mint/fallback/world.glb",
+    "reason": "Local fallback copy for offline preview."
+  },
   "assets": [
     {
       "id": "mint_world_splat",
@@ -31,14 +38,17 @@
     },
     {
       "id": "mint_collision_map",
-      "kind": "data",
+      "kind": "collider",
       "source": "mint/colliders.json",
       "alias": ["colliders", "衝突"],
       "scriptName": "mint_collision_map",
       "tags": ["collision", "data"],
       "meta": {
         "format": "json",
-        "runtime": "threejs"
+        "runtime": "threejs",
+        "shape": "mesh",
+        "layer": "world",
+        "trigger": false
       }
     }
   ]
