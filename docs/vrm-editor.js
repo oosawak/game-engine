@@ -41,6 +41,7 @@ const state = {
   previewOffsetY: 0,
   previewDragging: false,
   bonePreviewZoom: 1,
+  bonePreviewAxis: "x",
   previewSplitWidth: 360,
   loadedVrmName: "",
   loadedVrmUrl: "",
@@ -103,6 +104,9 @@ let bonePreviewRoot = null;
 let bonePreviewLine = null;
 let bonePreviewDots = [];
 let bonePreviewNodeToDot = new Map();
+let bonePreviewRaycaster = null;
+let bonePreviewPointer = null;
+let bonePreviewDragState = null;
 let previewDragState = null;
 let previewSplitDragState = null;
 const STORAGE_KEY = "game-engine.vrm-editor.v3";
@@ -317,6 +321,7 @@ function cloneMotionList(list) {
     boneRotations: cloneBoneRotations(motion.boneRotations),
     expressionAdjustments: cloneExpressionAdjustments(motion.expressionAdjustments),
     fingerAdjustments: cloneFingerAdjustments(motion.fingerAdjustments),
+    poseAdjustments: clonePoseAdjustments(motion.poseAdjustments),
   }));
 }
 
@@ -371,6 +376,7 @@ function normalizeMotion(raw, index) {
   const boneRotations = normalizeBoneRotations(raw.boneRotations);
   const expressionAdjustments = normalizeExpressionAdjustments(raw.expressionAdjustments);
   const fingerAdjustments = normalizeFingerAdjustments(raw.fingerAdjustments);
+  const poseAdjustments = normalizePoseAdjustments(raw.poseAdjustments);
 
   return {
     id,
@@ -387,6 +393,7 @@ function normalizeMotion(raw, index) {
     boneRotations,
     expressionAdjustments,
     fingerAdjustments,
+    poseAdjustments,
   };
 }
 
@@ -488,6 +495,20 @@ function cloneFingerAdjustments(value) {
     .filter((entry) => entry.hand.trim().length > 0 || entry.pose.trim().length > 0);
 }
 
+function clonePoseAdjustments(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => ({
+      bone: typeof entry.bone === "string" ? entry.bone : "",
+      rotation: normalizeRotationArray(entry.rotation),
+    }))
+    .filter((entry) => entry.bone.trim().length > 0);
+}
+
 function isVrmDatasetMotion(motion) {
   return Boolean(motion?.source && isVrmaSource(motion.source));
 }
@@ -583,6 +604,74 @@ function normalizeFingerAdjustments(value) {
   }
 
   return cloneFingerAdjustments(value);
+}
+
+function normalizePoseAdjustments(value) {
+  if (typeof value === "string") {
+    try {
+      return clonePoseAdjustments(JSON.parse(value));
+    } catch (error) {
+      return [];
+    }
+  }
+
+  return clonePoseAdjustments(value);
+}
+
+function normalizeBonePreviewAxis(value) {
+  const axis = String(value || "").trim().toLowerCase();
+  return axis === "y" || axis === "z" ? axis : "x";
+}
+
+function cycleBonePreviewAxis() {
+  state.bonePreviewAxis = state.bonePreviewAxis === "x"
+    ? "y"
+    : state.bonePreviewAxis === "y"
+      ? "z"
+      : "x";
+}
+
+function getMotionPoseAdjustment(motion, boneKey) {
+  if (!motion || !boneKey) {
+    return null;
+  }
+
+  if (!Array.isArray(motion.poseAdjustments)) {
+    motion.poseAdjustments = [];
+  }
+
+  let entry = motion.poseAdjustments.find((item) => item?.bone === boneKey) ?? null;
+  if (!entry) {
+    entry = { bone: boneKey, rotation: [0, 0, 0] };
+    motion.poseAdjustments.push(entry);
+  }
+  if (!Array.isArray(entry.rotation)) {
+    entry.rotation = [0, 0, 0];
+  }
+  while (entry.rotation.length < 3) {
+    entry.rotation.push(0);
+  }
+  return entry;
+}
+
+function applyMotionPoseAdjustments(motion) {
+  if (!motion || !Array.isArray(motion.poseAdjustments)) {
+    return;
+  }
+
+  for (const entry of motion.poseAdjustments) {
+    if (!entry?.bone) {
+      continue;
+    }
+    const node = resolveMotionBoneNode(entry.bone);
+    if (!node) {
+      continue;
+    }
+    const rotation = normalizeRotationArray(entry.rotation);
+    node.rotation.x += THREE.MathUtils.degToRad(rotation[0] || 0);
+    node.rotation.y += THREE.MathUtils.degToRad(rotation[1] || 0);
+    node.rotation.z += THREE.MathUtils.degToRad(rotation[2] || 0);
+  }
 }
 
 function parseDurationSeconds(duration) {
@@ -1390,6 +1479,8 @@ function setupBonePreview() {
   });
   bonePreviewRenderer.setPixelRatio(window.devicePixelRatio || 1);
   bonePreviewRenderer.outputColorSpace = THREE.SRGBColorSpace;
+  bonePreviewRaycaster = new THREE.Raycaster();
+  bonePreviewPointer = new THREE.Vector2();
 
   const ambient = new THREE.AmbientLight(0xffffff, 1.7);
   const key = new THREE.DirectionalLight(0x7cf0b7, 2.0);
@@ -1479,6 +1570,7 @@ function renderBonePreviewFrame() {
   const zoom = THREE.MathUtils.clamp(state.bonePreviewZoom || 1, 0.45, 2.4);
 
   const nodeToPoint = new Map();
+  bonePreviewNodeToDot = new Map();
   for (let index = 0; index < nodes.length; index += 1) {
     nodeToPoint.set(nodes[index].uuid, normalized[index]);
   }
@@ -1536,8 +1628,15 @@ function renderBonePreviewFrame() {
     if (index < nodes.length) {
       const node = nodes[index];
       const point = nodeToPoint.get(node.uuid);
+      const entry = vrmPreviewBoneOptions[index];
       dot.visible = true;
       dot.position.set(point.x * scale * zoom, point.y * scale * zoom, point.z * scale * zoom);
+      dot.userData = {
+        boneKey: entry?.key ?? "",
+        boneLabel: entry?.label ?? "",
+        nodeUuid: node.uuid,
+      };
+      bonePreviewNodeToDot.set(node.uuid, dot);
       if (selectedNode && node.uuid === selectedNode.uuid) {
         dot.material.color.set(0x7cf0b7);
         dot.scale.setScalar(1.4);
@@ -1550,6 +1649,7 @@ function renderBonePreviewFrame() {
       }
     } else {
       dot.visible = false;
+      dot.userData = null;
     }
   }
 
@@ -1557,10 +1657,120 @@ function renderBonePreviewFrame() {
   bonePreviewCamera.lookAt(0, 0, 0);
 
   if (refs.bonePreviewNote) {
-    refs.bonePreviewNote.textContent = `${nodes.length} bones in hierarchy · wheel to zoom`;
+    refs.bonePreviewNote.textContent = state.isPaused && state.selectedBoneKey
+      ? `${nodes.length} bones in hierarchy · paused · axis ${normalizeBonePreviewAxis(state.bonePreviewAxis).toUpperCase()} · drag selected bone`
+      : `${nodes.length} bones in hierarchy · wheel to zoom`;
   }
 
   bonePreviewRenderer.render(bonePreviewScene, bonePreviewCamera);
+}
+
+function getBonePreviewHit(event) {
+  if (!bonePreviewRaycaster || !bonePreviewPointer || !bonePreviewCanvas || !bonePreviewCamera) {
+    return null;
+  }
+
+  const rect = bonePreviewCanvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) {
+    return null;
+  }
+
+  bonePreviewPointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  bonePreviewPointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1);
+  bonePreviewRaycaster.setFromCamera(bonePreviewPointer, bonePreviewCamera);
+
+  const hits = bonePreviewRaycaster.intersectObjects(bonePreviewDots.filter((dot) => dot.visible), false);
+  const hit = hits[0];
+  if (!hit?.object) {
+    return null;
+  }
+
+  const boneKey = hit.object.userData?.boneKey || "";
+  const entry = vrmPreviewBoneOptions.find((item) => item.key === boneKey) ?? null;
+  if (!entry?.node) {
+    return null;
+  }
+
+  return {
+    entry,
+    node: entry.node,
+  };
+}
+
+function beginBonePreviewDrag(event) {
+  if (!state.isPaused) {
+    return false;
+  }
+
+  const hit = getBonePreviewHit(event);
+  if (!hit) {
+    return false;
+  }
+
+  const motion = getCurrentMotion();
+  if (!motion) {
+    return false;
+  }
+
+  state.selectedBoneKey = hit.entry.key;
+  const adjustment = getMotionPoseAdjustment(motion, hit.entry.key);
+  bonePreviewDragState = {
+    motionId: motion.id,
+    boneKey: hit.entry.key,
+    startX: event.clientX,
+    startY: event.clientY,
+    startRotation: [...adjustment.rotation],
+  };
+
+  refs.bonePreviewCanvas?.setPointerCapture?.(event.pointerId);
+  render();
+  renderPreviewFrame();
+  renderBonePreviewFrame();
+  return true;
+}
+
+function updateBonePreviewDrag(event) {
+  if (!bonePreviewDragState) {
+    return;
+  }
+
+  const motion = getCurrentMotion();
+  if (!motion || motion.id !== bonePreviewDragState.motionId) {
+    return;
+  }
+
+  const adjustment = getMotionPoseAdjustment(motion, bonePreviewDragState.boneKey);
+  if (!adjustment) {
+    return;
+  }
+
+  const deltaX = event.clientX - bonePreviewDragState.startX;
+  const deltaY = event.clientY - bonePreviewDragState.startY;
+  const sensitivity = event.shiftKey ? 0.15 : 0.45;
+  const axis = normalizeBonePreviewAxis(state.bonePreviewAxis);
+  if (axis === "x") {
+    adjustment.rotation[0] = bonePreviewDragState.startRotation[0] - deltaY * sensitivity;
+    adjustment.rotation[1] = bonePreviewDragState.startRotation[1];
+    adjustment.rotation[2] = bonePreviewDragState.startRotation[2];
+  } else if (axis === "y") {
+    adjustment.rotation[0] = bonePreviewDragState.startRotation[0];
+    adjustment.rotation[1] = bonePreviewDragState.startRotation[1] + deltaX * sensitivity;
+    adjustment.rotation[2] = bonePreviewDragState.startRotation[2];
+  } else {
+    adjustment.rotation[0] = bonePreviewDragState.startRotation[0];
+    adjustment.rotation[1] = bonePreviewDragState.startRotation[1];
+    adjustment.rotation[2] = bonePreviewDragState.startRotation[2] + deltaX * sensitivity;
+  }
+
+  renderPreviewFrame();
+  renderBonePreviewFrame();
+}
+
+function endBonePreviewDrag(event) {
+  if (refs.bonePreviewCanvas?.hasPointerCapture?.(event.pointerId)) {
+    refs.bonePreviewCanvas.releasePointerCapture(event.pointerId);
+  }
+  bonePreviewDragState = null;
 }
 
 function setupVrmPreview() {
@@ -1773,7 +1983,7 @@ function applyMotionPose(motion, progress, elapsedSeconds) {
       }
     } else if (name.includes("respect") || name.includes("bow")) {
       if (chestNode) {
-        chestNode.rotation.x += 0.05 * weight;
+      chestNode.rotation.x += 0.05 * weight;
       }
     } else if (name.includes("focused")) {
       if (headNode) {
@@ -1781,6 +1991,8 @@ function applyMotionPose(motion, progress, elapsedSeconds) {
       }
     }
   }
+
+  applyMotionPoseAdjustments(motion);
 
   const selectedBone = state.selectedBoneKey
     ? vrmPreviewBoneOptions.find((entry) => entry.key === state.selectedBoneKey)?.node ?? null
@@ -1821,6 +2033,7 @@ function applyVrmaMotionPose(runtime, motion, progress) {
   }
   runtime.mixer.setTime(time);
   runtime.mixer.update(1 / 60);
+  applyMotionPoseAdjustments(motion);
   if (runtime.action && !state.isPlaying) {
     runtime.action.paused = true;
   }
@@ -2953,6 +3166,50 @@ async function init() {
     },
     { passive: false },
   );
+
+  window.addEventListener("keydown", (event) => {
+    if (normalizeBonePreviewAxis(event.key) !== "z") {
+      return;
+    }
+
+    const target = event.target;
+    const editableTarget = target instanceof HTMLElement
+      && (target.matches("input, textarea, select") || target.isContentEditable);
+    if (editableTarget) {
+      return;
+    }
+
+    state.bonePreviewAxis = state.bonePreviewAxis === "x"
+      ? "y"
+      : state.bonePreviewAxis === "y"
+        ? "z"
+        : "x";
+    if (state.isPaused && state.selectedBoneKey) {
+      renderBonePreviewFrame();
+    }
+  });
+
+  refs.bonePreviewCanvas.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+    const started = beginBonePreviewDrag(event);
+    if (!started) {
+      return;
+    }
+    event.preventDefault();
+  });
+
+  refs.bonePreviewCanvas.addEventListener("pointermove", (event) => {
+    if (!bonePreviewDragState) {
+      return;
+    }
+    event.preventDefault();
+    updateBonePreviewDrag(event);
+  });
+
+  refs.bonePreviewCanvas.addEventListener("pointerup", endBonePreviewDrag);
+  refs.bonePreviewCanvas.addEventListener("pointercancel", endBonePreviewDrag);
 
   refs.vrmPreviewCanvas.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) {
