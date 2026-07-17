@@ -1060,11 +1060,22 @@ function renderMotionList() {
       <div class="tag-row">
         ${motion.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}
       </div>
+      <div class="motion-actions">
+        <button class="motion-card-button" type="button">Play</button>
+      </div>
     `;
     card.addEventListener("click", () => {
       showMotionPose(motion);
     });
     card.addEventListener("dblclick", () => {
+      state.selectedId = motion.id;
+      syncPlaybackToSelection(true);
+      startMotionPlayback(motion);
+    });
+    const playButton = card.querySelector(".motion-card-button");
+    playButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       state.selectedId = motion.id;
       syncPlaybackToSelection(true);
       startMotionPlayback(motion);
