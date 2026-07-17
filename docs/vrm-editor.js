@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin } from "@pixiv/three-vrm";
-import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from "@pixiv/three-vrm-animation";
+import { VRMAnimationLoaderPlugin, VRMLookAtQuaternionProxy, createVRMAnimationClip } from "@pixiv/three-vrm-animation";
 import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 
 const DEFAULT_MOTIONS = [];
@@ -105,9 +105,12 @@ let vrmaMotionLoader = null;
 let vrmPreviewBoneIndex = new Map();
 let vrmPreviewRestPose = new Map();
 let vrmaMotionRuntimeCache = new Map();
+let vrmPreviewLookAtQuaternionProxy = null;
 let cameraCaptureStream = null;
 let cameraCaptureVideo = null;
 let cameraCaptureOverlay = null;
+let cameraCaptureInputCanvas = null;
+let cameraCaptureInputContext = null;
 let cameraCaptureContext = null;
 let cameraCaptureLandmarker = null;
 let cameraCaptureInitPromise = null;
@@ -1024,6 +1027,51 @@ function resizeCameraCaptureOverlay() {
   return { width, height, context };
 }
 
+function resizeCameraCaptureInputCanvas(width, height) {
+  if (!cameraCaptureInputCanvas) {
+    cameraCaptureInputCanvas = document.createElement("canvas");
+  }
+
+  const targetSize = Math.max(1, Math.floor(Math.min(width || 0, height || 0)));
+  if (targetSize < 2) {
+    return null;
+  }
+
+  if (cameraCaptureInputCanvas.width !== targetSize) {
+    cameraCaptureInputCanvas.width = targetSize;
+  }
+  if (cameraCaptureInputCanvas.height !== targetSize) {
+    cameraCaptureInputCanvas.height = targetSize;
+  }
+
+  cameraCaptureInputContext = cameraCaptureInputCanvas.getContext("2d");
+  return cameraCaptureInputContext ? { canvas: cameraCaptureInputCanvas, context: cameraCaptureInputContext, size: targetSize } : null;
+}
+
+function updateCameraCaptureInputCanvas() {
+  if (!cameraCaptureVideo || !cameraCaptureInputContext || !cameraCaptureInputCanvas) {
+    return false;
+  }
+
+  const videoWidth = cameraCaptureVideo.videoWidth || 0;
+  const videoHeight = cameraCaptureVideo.videoHeight || 0;
+  if (videoWidth < 2 || videoHeight < 2) {
+    return false;
+  }
+
+  const size = Math.max(2, Math.floor(Math.min(videoWidth, videoHeight)));
+  if (cameraCaptureInputCanvas.width !== size || cameraCaptureInputCanvas.height !== size) {
+    cameraCaptureInputCanvas.width = size;
+    cameraCaptureInputCanvas.height = size;
+  }
+
+  const sourceSize = Math.min(videoWidth, videoHeight);
+  const sx = Math.floor((videoWidth - sourceSize) / 2);
+  const sy = Math.floor((videoHeight - sourceSize) / 2);
+  cameraCaptureInputContext.drawImage(cameraCaptureVideo, sx, sy, sourceSize, sourceSize, 0, 0, size, size);
+  return true;
+}
+
 function drawCameraCaptureOverlay(result) {
   const overlay = resizeCameraCaptureOverlay();
   if (!overlay?.context) {
@@ -1146,8 +1194,18 @@ async function startCameraCaptureLoop(sessionId) {
     }
 
     try {
+      if (!cameraCaptureInputCanvas || !cameraCaptureInputContext) {
+        const size = Math.max(2, Math.floor(Math.min(video.videoWidth || 0, video.videoHeight || 0)));
+        const input = resizeCameraCaptureInputCanvas(size, size);
+        if (!input) {
+          return;
+        }
+      }
+      if (!updateCameraCaptureInputCanvas()) {
+        return;
+      }
       const now = performance.now();
-      const result = cameraCaptureLandmarker.detectForVideo(video, now);
+      const result = cameraCaptureLandmarker.detectForVideo(cameraCaptureInputCanvas, now);
       cameraCaptureLatestResult = result;
       drawCameraCaptureOverlay(result);
       if (!state.cameraCaptureReady) {
@@ -1205,6 +1263,8 @@ async function startCameraCaptureSession() {
     cameraCaptureVideo = refs.cameraCaptureVideo;
     cameraCaptureOverlay = refs.cameraCaptureOverlay;
     cameraCaptureContext = cameraCaptureOverlay?.getContext?.("2d") ?? null;
+    cameraCaptureInputCanvas = document.createElement("canvas");
+    cameraCaptureInputContext = cameraCaptureInputCanvas.getContext("2d");
     cameraCaptureLandmarker = await ensureCameraCaptureLandmarker();
     state.cameraCaptureActive = true;
     state.cameraCaptureHint = "Move into frame, then press Capture Motion.";
@@ -1245,6 +1305,8 @@ function stopCameraCaptureSession() {
     refs.cameraCaptureVideo.srcObject = null;
   }
   cameraCaptureLatestResult = null;
+  cameraCaptureInputCanvas = null;
+  cameraCaptureInputContext = null;
   state.cameraCaptureActive = false;
   updateCameraCaptureStatus(state.cameraCaptureOpen ? "Camera stopped." : "Camera idle.", "");
   drawCameraCaptureOverlay(null);
@@ -2032,13 +2094,30 @@ function renderPreviewFrame() {
   updatePreviewContentOffset();
   const motion = getCurrentMotion();
   const progress = updatePlaybackProgress(motion, deltaSeconds);
-  if (motion && isVrmaSource(motion.source)) {
+  const shouldUseLiveCameraPose = Boolean(
+    state.cameraCaptureActive
+    && state.cameraCaptureOpen
+    && cameraCaptureLatestResult
+    && !state.isPlaying
+    && !state.isPaused,
+  );
+  const shouldUseSavedCameraPose = Boolean(
+    !shouldUseLiveCameraPose
+    && motion?.createdViaCamera
+    && motion.cameraCapture,
+  );
+
+  if (shouldUseLiveCameraPose) {
+    applyCameraCapturePose(cameraCaptureLatestResult);
+  } else if (motion && isVrmaSource(motion.source)) {
     const runtime = vrmaMotionRuntimeCache.get(motion.source);
     if (runtime?.ready && vrmPreviewVrm) {
       applyVrmaMotionPose(runtime, motion, progress);
     } else {
       void ensureVrmaMotionRuntime(motion);
     }
+  } else if (shouldUseSavedCameraPose) {
+    applyCameraCaptureSnapshotPose(motion.cameraCapture);
   } else {
     applyMotionPose(motion, progress, state.playbackTime);
   }
@@ -2514,7 +2593,24 @@ function clearPreviewModel() {
   vrmPreviewBoneIndex = new Map();
   vrmPreviewRestPose = new Map();
   vrmPreviewVrm = null;
+  vrmPreviewLookAtQuaternionProxy = null;
   updatePreviewContentVisibility();
+}
+
+function ensurePreviewLookAtQuaternionProxy() {
+  if (!vrmPreviewVrm?.lookAt || !vrmPreviewVrm.scene) {
+    return null;
+  }
+
+  if (vrmPreviewLookAtQuaternionProxy) {
+    return vrmPreviewLookAtQuaternionProxy;
+  }
+
+  const proxy = new VRMLookAtQuaternionProxy(vrmPreviewVrm.lookAt);
+  proxy.name = "lookAtQuaternionProxy";
+  vrmPreviewVrm.scene.add(proxy);
+  vrmPreviewLookAtQuaternionProxy = proxy;
+  return proxy;
 }
 
 function fitPreviewModel(root) {
@@ -2539,6 +2635,187 @@ function fitPreviewModel(root) {
   root.position.y = -box.min.y * scale + 0.02;
 }
 
+function restorePreviewRestPose() {
+  for (const entry of vrmPreviewRestPose.values()) {
+    if (!entry?.node) {
+      continue;
+    }
+    entry.node.rotation.x = entry.rotation.x;
+    entry.node.rotation.y = entry.rotation.y;
+    entry.node.rotation.z = entry.rotation.z;
+  }
+}
+
+function getCameraCaptureLandmarkSet(result) {
+  if (Array.isArray(result?.poseWorldLandmarks) && result.poseWorldLandmarks[0]?.length) {
+    return result.poseWorldLandmarks[0];
+  }
+  if (Array.isArray(result?.poseLandmarks) && result.poseLandmarks[0]?.length) {
+    return result.poseLandmarks[0];
+  }
+  return [];
+}
+
+function getCameraCapturePoint(result, index) {
+  const landmark = getCameraCaptureLandmarkSet(result)[index];
+  if (!landmark) {
+    return null;
+  }
+
+  const x = Number(landmark.x);
+  const y = Number(landmark.y);
+  const z = Number(landmark.z);
+  return new THREE.Vector3(
+    Number.isFinite(x) ? x : 0,
+    Number.isFinite(y) ? y : 0,
+    Number.isFinite(z) ? z : 0,
+  );
+}
+
+function getCameraCaptureMidpoint(result, a, b) {
+  const first = getCameraCapturePoint(result, a);
+  const second = getCameraCapturePoint(result, b);
+  if (!first || !second) {
+    return null;
+  }
+
+  return first.clone().add(second).multiplyScalar(0.5);
+}
+
+function applyLimbRotationFromPoints(node, startPoint, endPoint, options = {}) {
+  if (!node || !startPoint || !endPoint) {
+    return;
+  }
+
+  const rest = vrmPreviewRestPose.get(node.uuid)?.rotation ?? {
+    x: node.rotation.x,
+    y: node.rotation.y,
+    z: node.rotation.z,
+  };
+  const direction = endPoint.clone().sub(startPoint);
+  if (direction.lengthSq() < 1e-8) {
+    return;
+  }
+
+  direction.normalize();
+  const mirror = options.mirror ? -1 : 1;
+  const zAngle = Math.atan2(direction.x * mirror, -direction.y);
+  const xAngle = Math.atan2(direction.z, Math.max(0.001, Math.hypot(direction.x, direction.y)));
+  const yAngle = Math.atan2(direction.x * mirror, Math.max(0.001, -direction.z));
+
+  node.rotation.x = rest.x + THREE.MathUtils.clamp(xAngle, -1.2, 1.2) * (options.xScale ?? 0.75);
+  node.rotation.y = rest.y + THREE.MathUtils.clamp(yAngle, -0.9, 0.9) * (options.yScale ?? 0.35);
+  node.rotation.z = rest.z + THREE.MathUtils.clamp(zAngle, -1.8, 1.8) * (options.zScale ?? 0.85);
+}
+
+function applyCameraCapturePose(result) {
+  if (!result) {
+    return false;
+  }
+
+  restorePreviewRestPose();
+
+  const hips = getCameraCaptureMidpoint(result, 23, 24);
+  const leftShoulder = getCameraCapturePoint(result, 11);
+  const rightShoulder = getCameraCapturePoint(result, 12);
+  const leftElbow = getCameraCapturePoint(result, 13);
+  const rightElbow = getCameraCapturePoint(result, 14);
+  const leftWrist = getCameraCapturePoint(result, 15);
+  const rightWrist = getCameraCapturePoint(result, 16);
+  const leftHip = getCameraCapturePoint(result, 23);
+  const rightHip = getCameraCapturePoint(result, 24);
+  const leftKnee = getCameraCapturePoint(result, 25);
+  const rightKnee = getCameraCapturePoint(result, 26);
+  const leftAnkle = getCameraCapturePoint(result, 27);
+  const rightAnkle = getCameraCapturePoint(result, 28);
+  const nose = getCameraCapturePoint(result, 0);
+
+  const hipsNode = resolveMotionSlotNode("hips");
+  const spineNode = resolveMotionSlotNode("spine");
+  const chestNode = resolveMotionSlotNode("chest");
+  const neckNode = resolveMotionSlotNode("neck");
+  const headNode = resolveMotionSlotNode("head");
+  const leftShoulderNode = resolveMotionSlotNode("leftShoulder");
+  const rightShoulderNode = resolveMotionSlotNode("rightShoulder");
+  const leftArmNode = resolveMotionSlotNode("leftArm");
+  const rightArmNode = resolveMotionSlotNode("rightArm");
+  const leftForeArmNode = resolveMotionSlotNode("leftForeArm");
+  const rightForeArmNode = resolveMotionSlotNode("rightForeArm");
+  const leftUpLegNode = resolveMotionSlotNode("leftUpLeg");
+  const rightUpLegNode = resolveMotionSlotNode("rightUpLeg");
+  const leftLegNode = resolveMotionSlotNode("leftLeg");
+  const rightLegNode = resolveMotionSlotNode("rightLeg");
+
+  if (hipsNode && leftHip && rightHip) {
+    const hipSpan = rightHip.clone().sub(leftHip);
+    const rest = vrmPreviewRestPose.get(hipsNode.uuid)?.rotation ?? hipsNode.rotation;
+    hipsNode.rotation.z = rest.z + THREE.MathUtils.clamp(Math.atan2(hipSpan.y, Math.max(0.001, hipSpan.x)), -0.8, 0.8) * 0.5;
+  }
+
+  if (spineNode && leftShoulder && rightShoulder && hips) {
+    const shoulderCenter = leftShoulder.clone().add(rightShoulder).multiplyScalar(0.5);
+    applyLimbRotationFromPoints(spineNode, hips, shoulderCenter, { xScale: 0.55, yScale: 0.2, zScale: 0.45 });
+  }
+
+  if (chestNode && leftShoulder && rightShoulder) {
+    const shoulderCenter = leftShoulder.clone().add(rightShoulder).multiplyScalar(0.5);
+    const neckCenter = nose ? nose.clone() : shoulderCenter.clone();
+    applyLimbRotationFromPoints(chestNode, shoulderCenter, neckCenter, { xScale: 0.65, yScale: 0.25, zScale: 0.45 });
+  }
+
+  if (neckNode && nose && leftShoulder && rightShoulder) {
+    const shoulderCenter = leftShoulder.clone().add(rightShoulder).multiplyScalar(0.5);
+    applyLimbRotationFromPoints(neckNode, shoulderCenter, nose, { xScale: 0.45, yScale: 0.2, zScale: 0.35 });
+  }
+
+  if (headNode && nose && leftShoulder && rightShoulder) {
+    const shoulderCenter = leftShoulder.clone().add(rightShoulder).multiplyScalar(0.5);
+    applyLimbRotationFromPoints(headNode, shoulderCenter, nose, { xScale: 0.4, yScale: 0.15, zScale: 0.3 });
+  }
+
+  applyLimbRotationFromPoints(leftShoulderNode, leftShoulder, leftElbow, { mirror: true, xScale: 0.2, yScale: 0.15, zScale: 0.75 });
+  applyLimbRotationFromPoints(rightShoulderNode, rightShoulder, rightElbow, { mirror: false, xScale: 0.2, yScale: 0.15, zScale: 0.75 });
+  applyLimbRotationFromPoints(leftArmNode, leftShoulder, leftElbow, { mirror: true, xScale: 0.35, yScale: 0.2, zScale: 0.85 });
+  applyLimbRotationFromPoints(rightArmNode, rightShoulder, rightElbow, { mirror: false, xScale: 0.35, yScale: 0.2, zScale: 0.85 });
+  applyLimbRotationFromPoints(leftForeArmNode, leftElbow, leftWrist, { mirror: true, xScale: 0.4, yScale: 0.2, zScale: 0.9 });
+  applyLimbRotationFromPoints(rightForeArmNode, rightElbow, rightWrist, { mirror: false, xScale: 0.4, yScale: 0.2, zScale: 0.9 });
+  applyLimbRotationFromPoints(leftUpLegNode, leftHip, leftKnee, { mirror: true, xScale: 0.35, yScale: 0.18, zScale: 0.85 });
+  applyLimbRotationFromPoints(rightUpLegNode, rightHip, rightKnee, { mirror: false, xScale: 0.35, yScale: 0.18, zScale: 0.85 });
+  applyLimbRotationFromPoints(leftLegNode, leftKnee, leftAnkle, { mirror: true, xScale: 0.35, yScale: 0.18, zScale: 0.85 });
+  applyLimbRotationFromPoints(rightLegNode, rightKnee, rightAnkle, { mirror: false, xScale: 0.35, yScale: 0.18, zScale: 0.85 });
+
+  const selectedBone = state.selectedBoneKey
+    ? vrmPreviewBoneOptions.find((entry) => entry.key === state.selectedBoneKey)?.node ?? null
+    : null;
+  if (selectedBone && vrmPreviewBoneMarker) {
+    const worldPosition = new THREE.Vector3();
+    selectedBone.getWorldPosition(worldPosition);
+    vrmPreviewBoneMarker.visible = true;
+    vrmPreviewBoneMarker.position.copy(worldPosition);
+  } else if (vrmPreviewBoneMarker) {
+    vrmPreviewBoneMarker.visible = false;
+  }
+
+  return true;
+}
+
+function applyCameraCaptureSnapshotPose(capture) {
+  if (!capture) {
+    return false;
+  }
+
+  const result = {
+    poseWorldLandmarks: Array.isArray(capture.poseWorldLandmarks) && capture.poseWorldLandmarks.length
+      ? [capture.poseWorldLandmarks]
+      : [],
+    poseLandmarks: Array.isArray(capture.poseLandmarks) && capture.poseLandmarks.length
+      ? [capture.poseLandmarks]
+      : [],
+  };
+
+  return applyCameraCapturePose(result);
+}
+
 function applyMotionPose(motion, progress, elapsedSeconds) {
   if (!motion) {
     return;
@@ -2552,14 +2829,7 @@ function applyMotionPose(motion, progress, elapsedSeconds) {
   const motionBones = Array.isArray(motion.boneRotations) ? motion.boneRotations : [];
   const expressionAdjustments = Array.isArray(motion.expressionAdjustments) ? motion.expressionAdjustments : [];
 
-  for (const entry of vrmPreviewRestPose.values()) {
-    if (!entry?.node) {
-      continue;
-    }
-    entry.node.rotation.x = entry.rotation.x;
-    entry.node.rotation.y = entry.rotation.y;
-    entry.node.rotation.z = entry.rotation.z;
-  }
+  restorePreviewRestPose();
 
   for (const rotation of motionBones) {
     const node = resolveMotionBoneNode(rotation.bone);
@@ -2616,18 +2886,6 @@ function applyMotionPose(motion, progress, elapsedSeconds) {
   }
 
   applyMotionPoseAdjustments(motion);
-
-  const selectedBone = state.selectedBoneKey
-    ? vrmPreviewBoneOptions.find((entry) => entry.key === state.selectedBoneKey)?.node ?? null
-    : null;
-  if (selectedBone && vrmPreviewBoneMarker) {
-    const worldPosition = new THREE.Vector3();
-    selectedBone.getWorldPosition(worldPosition);
-    vrmPreviewBoneMarker.visible = true;
-    vrmPreviewBoneMarker.position.copy(worldPosition);
-  } else if (vrmPreviewBoneMarker) {
-    vrmPreviewBoneMarker.visible = false;
-  }
 }
 
 function applyVrmaMotionPose(runtime, motion, progress) {
@@ -2635,14 +2893,7 @@ function applyVrmaMotionPose(runtime, motion, progress) {
     return false;
   }
 
-  for (const entry of vrmPreviewRestPose.values()) {
-    if (!entry?.node) {
-      continue;
-    }
-    entry.node.rotation.x = entry.rotation.x;
-    entry.node.rotation.y = entry.rotation.y;
-    entry.node.rotation.z = entry.rotation.z;
-  }
+  restorePreviewRestPose();
 
   const duration = runtime.clip.duration || parseDurationSeconds(motion.duration);
   const sampledTime = Math.max(state.playbackTime, MOTION_PREVIEW_SAMPLE_TIME);
@@ -3111,6 +3362,7 @@ async function ensureVrmaMotionRuntime(motion) {
       throw new Error("VRMA animation data not found.");
     }
 
+    ensurePreviewLookAtQuaternionProxy();
     const clip = createVRMAnimationClip(vrmAnimation, vrmPreviewVrm);
     if (!clip) {
       throw new Error("VRMA animation clip creation failed.");
@@ -3469,6 +3721,7 @@ async function loadVrmPreview(source, label) {
     });
 
     vrmPreviewModelRoot.add(modelRoot);
+    ensurePreviewLookAtQuaternionProxy();
     fitPreviewModel(modelRoot);
     state.previewOffsetX = 0;
     state.previewOffsetY = 0;
