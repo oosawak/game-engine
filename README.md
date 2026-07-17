@@ -3,7 +3,8 @@ GameEngine Three.js + WASM + WebRTC + Rust Gamelogic + Javascript/Typescript + w
 
 ## Web output
 
-The current browser output can be exported to `dist/web` with:
+The browser-facing source of truth lives in `docs/`.
+When you need a publishable bundle, export `docs/` to `dist/web` with:
 
 ```bash
 npm run export:web
@@ -14,6 +15,9 @@ The export creates:
 - `dist/web/public` for HTML and JavaScript docs
 - `dist/web/assets` for runtime data and media files
 - `dist/web/index.html` as a redirect to the public entry point
+
+For local development and verification, serve `docs/` directly.
+That keeps the edit source and the preview source aligned while `dist/web` remains a generated output.
 
 ## Editor
 

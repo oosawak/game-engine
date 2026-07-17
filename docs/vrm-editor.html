@@ -193,6 +193,67 @@
       margin-bottom: 12px;
     }
 
+    .collapsible {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .collapsible-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .collapsible-header .collapsible-state {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .collapsible-body {
+      display: grid;
+      gap: 10px;
+    }
+
+    .collapsible.is-collapsed .collapsible-body {
+      display: none;
+    }
+
+    .vrm-tool-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .vrm-tool-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .vrm-tool-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
     .search-input {
       width: 100%;
       min-width: 0;
@@ -345,6 +406,21 @@
       pointer-events: none;
     }
 
+    .preview-playback {
+      position: absolute;
+      left: 16px;
+      top: 16px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      z-index: 2;
+    }
+
+    .preview-playback .mini-button {
+      pointer-events: auto;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
+    }
+
     .overlay-badge {
       display: inline-flex;
       align-items: center;
@@ -440,6 +516,11 @@
       color: var(--text);
       font: inherit;
       font-size: 13px;
+    }
+
+    .dataset-select {
+      min-width: 160px;
+      max-width: 220px;
     }
 
     .note {
@@ -583,6 +664,7 @@
         <button class="mini-button">Preset Pose</button>
         <button class="mini-button" id="loadVrmButton" type="button">Load VRM</button>
         <input id="vrmFileInput" type="file" accept=".vrm,.glb,.gltf" hidden />
+        <input id="datasetFileInput" type="file" accept=".json" hidden />
         <button class="mini-button" id="saveButton" type="button">Save</button>
         <button class="mini-button active" id="loadButton" type="button">Load</button>
         <button class="mini-button" id="clearLocalSaveButton" type="button">Clear Local Save</button>
@@ -594,13 +676,51 @@
         <div class="panel-header">
           <span>Motion List</span>
           <div class="panel-actions">
+            <select id="datasetSelect" class="input dataset-select" aria-label="Select dataset"></select>
             <span class="panel-subtle" id="motionCount">12 items</span>
           </div>
         </div>
         <div class="panel-body">
           <div class="panel-tools">
             <input id="motionSearch" class="search-input" type="search" placeholder="Search by id / alias / name" />
+            <div class="group">
+              <button class="mini-button" id="exportDatasetButton" type="button">Export JSON</button>
+              <button class="mini-button" id="importDatasetButton" type="button">Import JSON</button>
+            </div>
             <div class="filter-row" id="tagFilters"></div>
+            <section class="collapsible" id="vrmToolsSection">
+              <button class="collapsible-header" id="vrmToolsToggle" type="button">
+                <span>VRM Tools</span>
+                <span class="collapsible-state" id="vrmToolsState">Hand preset</span>
+              </button>
+              <div class="collapsible-body">
+                <div class="vrm-tool-grid">
+                  <div class="vrm-tool-row">
+                    <label class="field">
+                      <div class="field-label"><span>Hand Target</span><span>Both / Left / Right</span></div>
+                      <select id="vrmHandTarget" class="input">
+                        <option value="both">Both</option>
+                        <option value="left">Left</option>
+                        <option value="right">Right</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <div class="field-label"><span>Hand Pose</span><span>Open / Close</span></div>
+                      <select id="vrmHandPreset" class="input">
+                        <option value="open">Open</option>
+                        <option value="close">Close</option>
+                        <option value="relax">Relax</option>
+                        <option value="reset">Reset</option>
+                      </select>
+                    </label>
+                  </div>
+                  <button class="mini-button active" id="applyVrmHandPoseButton" type="button">Apply to Motion</button>
+                </div>
+                <div class="vrm-tool-note" id="vrmToolsNote">
+                  VRMA を含むデータセットを選んだときに使う補助 UI です。選択中モーションの指ポーズを上書きできます。
+                </div>
+              </div>
+            </section>
           </div>
           <div class="list" id="motionList"></div>
         </div>
@@ -614,12 +734,7 @@
           </div>
         </div>
         <div class="panel-body preview">
-          <div class="preview-toolbar">
-            <div class="group">
-              <button class="mini-button active" id="playButton" type="button">Play</button>
-              <button class="mini-button" id="stopButton" type="button">Stop</button>
-              <button class="mini-button" id="loopButton" type="button">Loop</button>
-            </div>
+        <div class="preview-toolbar">
             <div class="group">
               <button class="mini-button active" id="bonePreviewToggleButton" type="button">Bone Preview On</button>
               <button class="mini-button active" type="button" data-scene-camera="front">Front</button>
@@ -645,6 +760,11 @@
             <div class="preview-stage" id="previewStage">
               <canvas id="vrmPreviewCanvas" style="position:absolute; inset:0; width:100%; height:100%;"></canvas>
               <div class="avatar" aria-hidden="true"></div>
+              <div class="preview-playback">
+                <button class="mini-button active" id="playButton" type="button">Play</button>
+                <button class="mini-button" id="stopButton" type="button">Stop</button>
+                <button class="mini-button" id="loopButton" type="button">Loop</button>
+              </div>
               <div class="preview-overlay">
                 <span class="overlay-badge">Selected <strong id="overlayId">dataset_guide_normal_001</strong></span>
                 <span class="overlay-badge">Alias <strong id="overlayAlias">待機</strong></span>
@@ -723,19 +843,42 @@
               <div class="field-value" id="loadedVrmLabel">No VRM loaded.</div>
             </div>
             <div class="field">
+              <div class="field-label"><span>VRMA Runtime</span><span>Mapping</span></div>
+              <div class="note" id="vrmaRuntimeSummary">No VRMA motion selected.</div>
+            </div>
+            <div class="field">
               <div class="field-label"><span>Bone Mapping</span><span>Editable</span></div>
+              <div class="note">
+                Left Shoulder / Right Shoulder / Left Foot / Right Foot は VRMA の再生や retarget に影響する重要スロットです。
+              </div>
               <div class="input-row">
                 <label class="field">
                   <div class="field-label"><span>Hips / Root</span><span>Node</span></div>
                   <select id="boneMapHips" class="input"></select>
                 </label>
                 <label class="field">
+                  <div class="field-label"><span>Spine</span><span>Node</span></div>
+                  <select id="boneMapSpine" class="input"></select>
+                </label>
+                <label class="field">
                   <div class="field-label"><span>Chest</span><span>Node</span></div>
                   <select id="boneMapChest" class="input"></select>
                 </label>
                 <label class="field">
+                  <div class="field-label"><span>Neck</span><span>Node</span></div>
+                  <select id="boneMapNeck" class="input"></select>
+                </label>
+                <label class="field">
                   <div class="field-label"><span>Head</span><span>Node</span></div>
                   <select id="boneMapHead" class="input"></select>
+                </label>
+                <label class="field">
+                  <div class="field-label"><span>Left Shoulder</span><span>Required</span></div>
+                  <select id="boneMapLeftShoulder" class="input"></select>
+                </label>
+                <label class="field">
+                  <div class="field-label"><span>Right Shoulder</span><span>Required</span></div>
+                  <select id="boneMapRightShoulder" class="input"></select>
                 </label>
                 <label class="field">
                   <div class="field-label"><span>Left Arm</span><span>Node</span></div>
@@ -746,12 +889,44 @@
                   <select id="boneMapRightArm" class="input"></select>
                 </label>
                 <label class="field">
-                  <div class="field-label"><span>Left Leg</span><span>Node</span></div>
+                  <div class="field-label"><span>Left Elbow</span><span>Node</span></div>
+                  <select id="boneMapLeftForeArm" class="input"></select>
+                </label>
+                <label class="field">
+                  <div class="field-label"><span>Right Elbow</span><span>Node</span></div>
+                  <select id="boneMapRightForeArm" class="input"></select>
+                </label>
+                <label class="field">
+                  <div class="field-label"><span>Left Hip / Upper Leg</span><span>Node</span></div>
+                  <select id="boneMapLeftUpLeg" class="input"></select>
+                </label>
+                <label class="field">
+                  <div class="field-label"><span>Right Hip / Upper Leg</span><span>Node</span></div>
+                  <select id="boneMapRightUpLeg" class="input"></select>
+                </label>
+                <label class="field">
+                  <div class="field-label"><span>Left Knee</span><span>Node</span></div>
                   <select id="boneMapLeftLeg" class="input"></select>
                 </label>
                 <label class="field">
-                  <div class="field-label"><span>Right Leg</span><span>Node</span></div>
+                  <div class="field-label"><span>Right Knee</span><span>Node</span></div>
                   <select id="boneMapRightLeg" class="input"></select>
+                </label>
+                <label class="field">
+                  <div class="field-label"><span>Left Hand</span><span>Node</span></div>
+                  <select id="boneMapLeftHand" class="input"></select>
+                </label>
+                <label class="field">
+                  <div class="field-label"><span>Right Hand</span><span>Node</span></div>
+                  <select id="boneMapRightHand" class="input"></select>
+                </label>
+                <label class="field">
+                  <div class="field-label"><span>Left Foot</span><span>Required</span></div>
+                  <select id="boneMapLeftFoot" class="input"></select>
+                </label>
+                <label class="field">
+                  <div class="field-label"><span>Right Foot</span><span>Required</span></div>
+                  <select id="boneMapRightFoot" class="input"></select>
                 </label>
               </div>
             </div>
@@ -777,7 +952,9 @@
     {
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.167.1/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.1/examples/jsm/"
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.1/examples/jsm/",
+        "@pixiv/three-vrm": "https://esm.sh/@pixiv/three-vrm@3.5.5?bundle",
+        "@pixiv/three-vrm-animation": "https://esm.sh/@pixiv/three-vrm-animation@3.5.5?bundle"
       }
     }
   </script>

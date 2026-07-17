@@ -1,0 +1,83 @@
+{
+  "id": "dataset2",
+  "label": "Dataset 2",
+  "motions": [
+    {
+      "id": "dataset2_vrma_01",
+      "alias": "VRMA 01",
+      "scriptName": "dataset2_vrma_01",
+      "displayName": "VRMA 01",
+      "source": "./datasets/dataset2/VRMA_01.vrma",
+      "tags": ["vrma", "motion", "dataset2", "sequence"],
+      "priority": 10,
+      "loop": false,
+      "duration": "00:04"
+    },
+    {
+      "id": "dataset2_vrma_02",
+      "alias": "VRMA 02",
+      "scriptName": "dataset2_vrma_02",
+      "displayName": "VRMA 02",
+      "source": "./datasets/dataset2/VRMA_02.vrma",
+      "tags": ["vrma", "motion", "dataset2", "sequence"],
+      "priority": 10,
+      "loop": false,
+      "duration": "00:04"
+    },
+    {
+      "id": "dataset2_vrma_03",
+      "alias": "VRMA 03",
+      "scriptName": "dataset2_vrma_03",
+      "displayName": "VRMA 03",
+      "source": "./datasets/dataset2/VRMA_03.vrma",
+      "tags": ["vrma", "motion", "dataset2", "sequence"],
+      "priority": 10,
+      "loop": false,
+      "duration": "00:04"
+    },
+    {
+      "id": "dataset2_vrma_04",
+      "alias": "VRMA 04",
+      "scriptName": "dataset2_vrma_04",
+      "displayName": "VRMA 04",
+      "source": "./datasets/dataset2/VRMA_04.vrma",
+      "tags": ["vrma", "motion", "dataset2", "sequence"],
+      "priority": 10,
+      "loop": false,
+      "duration": "00:04"
+    },
+    {
+      "id": "dataset2_vrma_05",
+      "alias": "VRMA 05",
+      "scriptName": "dataset2_vrma_05",
+      "displayName": "VRMA 05",
+      "source": "./datasets/dataset2/VRMA_05.vrma",
+      "tags": ["vrma", "motion", "dataset2", "sequence"],
+      "priority": 10,
+      "loop": false,
+      "duration": "00:04"
+    },
+    {
+      "id": "dataset2_vrma_06",
+      "alias": "VRMA 06",
+      "scriptName": "dataset2_vrma_06",
+      "displayName": "VRMA 06",
+      "source": "./datasets/dataset2/VRMA_06.vrma",
+      "tags": ["vrma", "motion", "dataset2", "sequence"],
+      "priority": 10,
+      "loop": false,
+      "duration": "00:04"
+    },
+    {
+      "id": "dataset2_vrma_07",
+      "alias": "VRMA 07",
+      "scriptName": "dataset2_vrma_07",
+      "displayName": "VRMA 07",
+      "source": "./datasets/dataset2/VRMA_07.vrma",
+      "tags": ["vrma", "motion", "dataset2", "sequence"],
+      "priority": 10,
+      "loop": false,
+      "duration": "00:04"
+    }
+  ]
+}

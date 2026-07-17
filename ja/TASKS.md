@@ -211,10 +211,54 @@
 - [ ] VRM の humanoid bone への retarget を実装する
 - [ ] `Play / Stop / Loop / Seek` を実 clip 再生に対して動かす
 - [ ] `Bone Mapping` を手動補助 UI として整理する
+- [ ] `Left Shoulder / Right Shoulder / Left Foot / Right Foot` は VRM の重要スロットとして明示的に扱う
+- [ ] `text-to-vrma` の肩自動追従と指の自然ポーズ補完を VRMA 正規化の参考実装として反映する
+- [ ] `mediapipe-vrm-pose` の `getNormalizedBoneNode` ベースの肩・胸・首制御を参考にする
 - [ ] 骨名一覧を表示し、選択骨をプレビュー上で強調できるようにする
 - [ ] VRM の読み込み後に標準ポーズと実モーションの両方を確認できるようにする
 - [ ] モーション再生の単体テストを追加する
 - [ ] 標準 VRM とモーション定義の JSON サンプルを `docs` に追加する
+
+## Phase 19: Editor / External Tool Integration
+
+- [x] モーションなどの外部定義ソースを複数枠で扱えるようにする
+- [x] 外部定義ソースごとに別々の保存状態を持てるようにする
+- [x] Motion List で外部定義ソースを切り替えられるようにする
+- [ ] モーション、VRM、PNG、Scene、Script の編集と保存の共通仕様を定義する
+- [ ] 現在の編集内容を JSON として書き出せるようにする
+- [ ] JSON を読み込んで既存設定へ取り込めるようにする
+- [ ] スプライトシートとアニメーション定義を外部ツールから取り込めるようにする
+- [ ] `Player` / `Object` に外部生成アニメーションを割り当てられるようにする
+- [ ] 外部生成アニメーションを `SpriteAnimator` として再生できるようにする
+- [ ] モーションの検索、タグ、表示名、ソースを一括編集できるようにする
+- [ ] モーションの複製、削除、並べ替えをできるようにする
+- [ ] 差分確認と元データ比較の仕様を定義する
+- [ ] 検証結果を一覧で表示できるようにする
+- [ ] AI 生成アセットや外部ツール由来アセットを `Script` から参照しやすい形で公開する
+- [ ] VRM Editor の右ペインに共通の `Inspector` 規約を反映する
+- [ ] `Scene View` と `Bone Preview` のレイアウトを拡張時も崩れないように保つ
+- [ ] 外部生成ツールからのアニメーション投入フローを定義する
+- [ ] Player / Object に対して外部生成アニメーションを割り当てる UI と保存仕様を定義する
+
+## Phase 19.1: VRM Pose Reference Integration
+
+- [ ] `mediapipe-vrm-pose` を姿勢入力の参考実装として整理する
+- [ ] `VRMポーズファイラー` 系のポーズ保存 / 読込 / VRMA 出力の流れを参考タスクとして整理する
+- [ ] `text-to-vrma` をテキストから VRMA を生成する参考実装として整理する
+- [ ] `text-to-vrma` 由来の生成フローを、既存の VRMA 再生と切り離して検証できるようにする
+- [ ] 参考実装は「モーションを正しく動かす」本体機能が安定してから統合する
+- [ ] 参考実装から持ち込む機能を `姿勢入力`、`手指`、`顔`、`ポーズ保存`、`VRMA出力`、`Text-to-VRMA` に分割する
+- [ ] 参考機能は `VRM Editor` の既存モーション再生を壊さない形で追加する
+- [ ] 参考元として `third_party/text-to-vrma` と `third_party/mediapipe-vrm-pose` を明示的に維持する
+
+## Phase 20: Runtime / Output Contract
+
+- [ ] Web 出力時に編集した定義一式を同梱できるようにする
+- [ ] `Game View` から実行中の状態をエクスポートできるようにする
+- [ ] エディタで調整した設定をアプリ出力に引き継げるようにする
+- [ ] `Camera`、`Light`、`Object`、`UI` の出力設定を保存できるようにする
+- [ ] 将来の WASM / Rust 実装に渡すための中間 JSON を定義する
+- [ ] 出力アプリの最小サンプルを `docs` で確認できるようにする
 
 ## Mint Integration MVP 定義
 

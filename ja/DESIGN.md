@@ -640,3 +640,67 @@ AI Agent
 - コライダーの配置
 - 表示用のメタ情報管理
 - 編集画面との接続
+
+## 15. Editor / External Tool Integration
+
+### 15.1 位置づけ
+
+VRM Editor や Game View は、外部ツールで生成されたアニメーションやアセットを取り込める編集基盤として扱う。
+
+- 対象はモーションだけでなく、VRM、PNG、Scene、Script も含む
+- データセット単位の話ではなく、エディタ全体の入出力仕様として定義する
+- 生成元は ComfyUI のような AI ワークフローでも、手作業の外部ツールでもよい
+
+### 15.2 役割分担
+
+- External Tool: スプライトシート、アニメーション定義、補助メタデータの生成
+- Editor Layer: 生成物の確認、命名、保存、差し替え、比較
+- Runtime Layer: 正規化済みアニメーションの再生と適用
+- ResourceManager: ローカルキャッシュと再利用
+
+### 15.3 外部生成アニメーションの流れ
+
+```text
+External Tool / AI Pipeline
+  -> Sprite Sheet / Animation JSON
+  -> Editor Import
+  -> Player / Object Assignment
+  -> Runtime Playback
+```
+
+### 15.4 共通データ形
+
+外部生成アニメーションは共通の JSON で保持する。
+
+- `id`: スクリプト参照用の固定キー
+- `alias`: 編集画面での別名
+- `displayName`: 一覧表示用の名前
+- `source`: 元データまたは生成元 URL
+- `target`: 対象オブジェクト種別やアタッチ先
+- `loop`: ループ設定
+- `fps`: 再生速度
+- `frames`: フレーム定義
+- `tags`: 検索補助
+- `meta`: ツール固有情報
+
+### 15.5 推奨フォルダ構成
+
+```text
+assets/
+  manifest/
+    shared-assets.json
+    editor-assets.json
+  animation/
+    generated/
+    imported/
+  sprites/
+  scenes/
+```
+
+### 15.6 設計原則
+
+- 生成物は Editor で確認してから Runtime に反映する
+- データセットとエンジン機能は分離し、共通のマニフェストでつなぐ
+- 外部ツール固有の状態を Runtime に持ち込まない
+- `Player` や `Object` への割り当ては UI と JSON の両方で再現できるようにする
+- アニメーションの実体と表示名を分離する

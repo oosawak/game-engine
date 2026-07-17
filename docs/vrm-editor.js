@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { BVHLoader } from "three/addons/loaders/BVHLoader.js";
+import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
+import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from "@pixiv/three-vrm-animation";
 
 const DEFAULT_MOTIONS = [];
 
@@ -39,17 +41,34 @@ const state = {
   previewOffsetY: 0,
   previewDragging: false,
   bonePreviewZoom: 1,
+  showVrmTools: true,
+  vrmHandTarget: "both",
+  vrmHandPreset: "open",
   loadedVrmName: "",
   loadedVrmUrl: "",
   loadedVrmToken: 0,
+  datasetId: "dataset1",
+  datasetLabel: "Dataset 1",
   boneMap: {
     hips: "",
+    spine: "",
     chest: "",
+    neck: "",
     head: "",
+    leftShoulder: "",
+    rightShoulder: "",
     leftArm: "",
     rightArm: "",
+    leftForeArm: "",
+    rightForeArm: "",
+    leftHand: "",
+    rightHand: "",
+    leftUpLeg: "",
+    rightUpLeg: "",
     leftLeg: "",
     rightLeg: "",
+    leftFoot: "",
+    rightFoot: "",
   },
   selectedBoneKey: "",
 };
@@ -67,16 +86,19 @@ let vrmPreviewContentRoot = null;
 let vrmPreviewModelRoot = null;
 let vrmPreviewRig = null;
 let vrmPreviewModelParts = null;
+let vrmPreviewVrm = null;
 let vrmPreviewBoneOptions = [];
 let vrmPreviewBoneMarker = null;
 let vrmPreviewBoneMarkerLabel = null;
 let vrmPreviewFrame = 0;
 let vrmPreviewLastTime = 0;
 let vrmPreviewLoader = null;
+let vrmaMotionLoader = null;
 let vrmPreviewBoneIndex = new Map();
 let vrmPreviewRestPose = new Map();
 let motionRuntimeLoader = null;
-let motionRuntimeCache = new Map();
+let bvhMotionRuntimeCache = new Map();
+let vrmaMotionRuntimeCache = new Map();
 let bonePreviewCanvas = null;
 let bonePreviewScene = null;
 let bonePreviewCamera = null;
@@ -87,23 +109,222 @@ let bonePreviewDots = [];
 let bonePreviewNodeToDot = new Map();
 let previewDragState = null;
 const STORAGE_KEY = "game-engine.vrm-editor.v3";
+const DATASET_REGISTRY_KEY = "game-engine.vrm-editor.datasets.v1";
+const DATASET_SAVE_PREFIX = "game-engine.vrm-editor.dataset.v1.";
 const STORAGE_SCHEMA_VERSION = 3;
 const LEGACY_STORAGE_KEYS = ["game-engine.vrm-editor.v1", "game-engine.vrm-editor.v2"];
-const MANIFEST_SOURCES = ["./vrm-motion-dataset.json"];
+const DATASET_SOURCES = [
+  { id: "dataset1", label: "Dataset 1", source: "./datasets/dataset1.json" },
+  { id: "dataset2", label: "Dataset 2", source: "./datasets/dataset2.json" },
+  { id: "dataset3", label: "Dataset 3", source: "./datasets/dataset3.json" },
+  { id: "dataset4", label: "Dataset 4", source: "./datasets/dataset4.json" },
+];
 const STANDARD_VRM_SOURCE = "./assets/vrm/standard/standard.vrm";
 const STANDARD_VRM_LABEL = "Standard VRM";
+const VRM_HAND_TARGETS = ["both", "left", "right"];
+const VRM_HAND_PRESETS = ["open", "close", "relax", "reset"];
+const REQUIRED_BONE_SLOTS = ["leftShoulder", "rightShoulder", "leftFoot", "rightFoot"];
 const BONE_ALIAS_SLOTS = {
   hips: ["hips", "pelvis", "root", "body"],
-  chest: ["chest", "spine", "upperchest", "upper_body"],
-  head: ["head", "neck", "face"],
+  spine: ["spine", "spine1", "spine2", "upperspine", "torso"],
+  chest: ["chest", "upperchest", "upper_body"],
+  neck: ["neck"],
+  head: ["head", "face"],
+  leftShoulder: ["leftshoulder", "shoulderl", "claviclel", "leftclavicle", "lshoulder"],
+  rightShoulder: ["rightshoulder", "shoulderr", "clavicler", "rightclavicle", "rshoulder"],
   leftArm: ["leftarm", "left_arm", "arm_l", "l_arm", "shoulderl", "upperarm_l", "leftupperarm"],
   rightArm: ["rightarm", "right_arm", "arm_r", "r_arm", "shoulderr", "upperarm_r", "rightupperarm"],
+  leftForeArm: ["leftforearm", "left_forearm", "forearm_l", "l_forearm", "lowerarm_l"],
+  rightForeArm: ["rightforearm", "right_forearm", "forearm_r", "r_forearm", "lowerarm_r"],
   leftLeg: ["leftleg", "left_leg", "leg_l", "l_leg", "thighl", "upperleg_l", "leftthigh"],
   rightLeg: ["rightleg", "right_leg", "leg_r", "r_leg", "thighr", "upperleg_r", "rightthigh"],
+  leftUpLeg: ["leftupleg", "left_up_leg", "upleg_l", "upperleg_l", "leftthigh"],
+  rightUpLeg: ["rightupleg", "right_up_leg", "upleg_r", "upperleg_r", "rightthigh"],
   leftHand: ["lefthand", "left_hand", "hand_l", "l_hand", "leftwrist", "wrist_l"],
   rightHand: ["righthand", "right_hand", "hand_r", "r_hand", "rightwrist", "wrist_r"],
+  leftFoot: ["leftfoot", "left_foot", "foot_l", "footl", "l_foot", "leftankle", "ankle_l", "lefttoe", "lefttoebase"],
+  rightFoot: ["rightfoot", "right_foot", "foot_r", "footr", "r_foot", "rightankle", "ankle_r", "righttoe", "righttoebase"],
 };
 const BVH_AXIS_CORRECTION = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0, "XYZ"));
+const FOOT_AXIS_CORRECTION = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0, "XYZ"));
+
+function getDatasetSourceEntry(datasetId) {
+  return DATASET_SOURCES.find((entry) => entry.id === datasetId) ?? DATASET_SOURCES[0];
+}
+
+function ensureVrmLoaderPlugins(loader) {
+  if (!loader || loader._vrmPluginsRegistered) {
+    return loader;
+  }
+
+  loader.register((parser) => new VRMLoaderPlugin(parser));
+  loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
+  loader._vrmPluginsRegistered = true;
+  return loader;
+}
+
+function getDatasetSaveKey(datasetId) {
+  return `${DATASET_SAVE_PREFIX}${datasetId}`;
+}
+
+function readJsonStorage(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeJsonStorage(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function loadDatasetRegistry() {
+  const snapshot = readJsonStorage(DATASET_REGISTRY_KEY);
+  if (!snapshot || typeof snapshot !== "object") {
+    return null;
+  }
+  const datasetId = typeof snapshot.datasetId === "string" && snapshot.datasetId.trim()
+    ? snapshot.datasetId.trim()
+    : "";
+  if (!datasetId) {
+    return null;
+  }
+  return datasetId;
+}
+
+function saveDatasetRegistry(datasetId) {
+  try {
+    writeJsonStorage(DATASET_REGISTRY_KEY, {
+      datasetId,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    // Ignore registry write failures.
+  }
+}
+
+function cloneDatasetManifest(rawData) {
+  if (!rawData || typeof rawData !== "object") {
+    return null;
+  }
+
+  const cloned = {
+    ...rawData,
+  };
+
+  if (Array.isArray(rawData.motions)) {
+    cloned.motions = cloneMotionList(rawData.motions.map((motion) => normalizeMotion(motion, 0)).filter(Boolean));
+  }
+
+  if (Array.isArray(rawData.tags)) {
+    cloned.tags = rawData.tags.filter((tag) => typeof tag === "string");
+  }
+
+  return cloned;
+}
+
+function resetDatasetView(datasetLabel = state.datasetLabel) {
+  motions = [];
+  tags = [...DEFAULT_TAGS];
+  state.selectedId = "";
+  state.playbackMotionId = "";
+  state.playbackTime = 0;
+  state.playbackProgress = 0;
+  state.playing = "Loading...";
+  state.loading = true;
+  state.error = "";
+  state.datasetLabel = datasetLabel;
+}
+
+function mergeDatasetManifest(baseData, overrideData) {
+  if (!baseData || typeof baseData !== "object") {
+    return cloneDatasetManifest(overrideData);
+  }
+
+  if (!overrideData || typeof overrideData !== "object") {
+    return cloneDatasetManifest(baseData);
+  }
+
+  const merged = cloneDatasetManifest(baseData) ?? {};
+
+  for (const [key, value] of Object.entries(overrideData)) {
+    if (key === "motions" && Array.isArray(value)) {
+      merged.motions = value;
+      continue;
+    }
+
+    if (key === "tags" && Array.isArray(value)) {
+      merged.tags = value;
+      continue;
+    }
+
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      merged[key] = {
+        ...(merged[key] && typeof merged[key] === "object" && !Array.isArray(merged[key]) ? merged[key] : {}),
+        ...value,
+      };
+      continue;
+    }
+
+    merged[key] = value;
+  }
+
+  return merged;
+}
+
+async function loadDatasetSource(source) {
+  const url = new URL(source, import.meta.url);
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (data && typeof data.extends === "string" && data.extends.trim()) {
+    const parent = await loadDatasetSource(data.extends);
+    const next = { ...data };
+    delete next.extends;
+    return mergeDatasetManifest(parent, next);
+  }
+
+  return cloneDatasetManifest(data);
+}
+
+async function loadDatasetManifest(datasetId, options = {}) {
+  const preferSavedState = Boolean(options.preferSavedState);
+  const entry = getDatasetSourceEntry(datasetId);
+  resetDatasetView(entry.label);
+  render();
+  const sourceData = await loadDatasetSource(entry.source);
+  const savedData = preferSavedState ? readDatasetSnapshot(entry.id) : null;
+  const merged = savedData ? mergeDatasetManifest(sourceData, savedData) : sourceData;
+
+  state.datasetId = entry.id;
+  state.datasetLabel = typeof merged?.label === "string" && merged.label.trim()
+    ? merged.label.trim()
+    : entry.label;
+  saveDatasetRegistry(entry.id);
+  applyMotionData(merged);
+  state.loading = false;
+
+  const targetId = findMotionFromQuery();
+  if (targetId && motions.some((motion) => motion.id === targetId)) {
+    state.selectedId = targetId;
+  }
+  if (!state.selectedId && motions[0]) {
+    state.selectedId = motions[0].id;
+  }
+  if (!state.playbackMotionId || !motions.some((motion) => motion.id === state.playbackMotionId)) {
+    state.playbackMotionId = state.selectedId;
+  }
+  state.error = "";
+  render();
+}
 
 function cloneMotionList(list) {
   return list.map((motion) => ({
@@ -283,6 +504,124 @@ function cloneFingerAdjustments(value) {
     .filter((entry) => entry.hand.trim().length > 0 || entry.pose.trim().length > 0);
 }
 
+function buildFingerAdjustmentsForHand(target, pose) {
+  const hand = normalizeBoneKey(target);
+  const normalizedPose = normalizeBoneKey(pose);
+
+  if (normalizedPose === "reset") {
+    return [];
+  }
+
+  const entries = [];
+  if (hand === "both" || hand === "left") {
+    entries.push({ hand: "leftHand", pose: normalizedPose, weight: 1 });
+  }
+  if (hand === "both" || hand === "right") {
+    entries.push({ hand: "rightHand", pose: normalizedPose, weight: 1 });
+  }
+  return entries;
+}
+
+function isVrmDatasetMotion(motion) {
+  return Boolean(motion?.source && isVrmaSource(motion.source));
+}
+
+function datasetHasVrmMotions() {
+  return motions.some((motion) => isVrmDatasetMotion(motion));
+}
+
+function getHandPoseLabel(pose) {
+  const normalized = normalizeBoneKey(pose);
+  if (normalized === "close") {
+    return "Close";
+  }
+  if (normalized === "relax") {
+    return "Relax";
+  }
+  if (normalized === "reset") {
+    return "Reset";
+  }
+  return "Open";
+}
+
+function getHandPoseBias(pose) {
+  const normalized = normalizeBoneKey(pose);
+  if (normalized.includes("close") || normalized.includes("grip") || normalized.includes("fist")) {
+    return -0.28;
+  }
+  if (normalized.includes("relax")) {
+    return 0.04;
+  }
+  if (normalized.includes("open") || normalized.includes("spread")) {
+    return 0.16;
+  }
+  return 0.08;
+}
+
+function findBoneNodesByTerms(terms) {
+  const normalizedTerms = terms.map(normalizeBoneKey).filter(Boolean);
+  return vrmPreviewBoneOptions
+    .filter((entry) => {
+      const label = normalizeBoneKey(entry.label);
+      const type = normalizeBoneKey(entry.type);
+      return normalizedTerms.some((term) => label.includes(term) || type.includes(term));
+    })
+    .map((entry) => entry.node)
+    .filter(Boolean);
+}
+
+function collectFingerNodes(handSide) {
+  const side = normalizeBoneKey(handSide).includes("left") ? "left" : "right";
+  const prefixTerms = side === "left"
+    ? ["left", "l", "lhand", "lwrist"]
+    : ["right", "r", "rhand", "rwrist"];
+  const fingerGroups = [
+    ["thumb", "thumb1", "thumbproximal", "thumbmetacarpal", "thumbdistal"],
+    ["index", "index1", "indexproxima", "indexproximal", "indexmetacarpal", "indexdistal"],
+    ["middle", "middle1", "middleproximal", "middlemetacarpal", "middledistal"],
+    ["ring", "ring1", "ringproximal", "ringmetacarpal", "ringdistal"],
+    ["little", "little1", "pinky", "littleproximal", "littlemetacarpal", "littledistal"],
+  ];
+
+  const nodes = [];
+  for (const fingerTerms of fingerGroups) {
+    const terms = [
+      ...prefixTerms.flatMap((prefix) => fingerTerms.map((finger) => `${prefix}${finger}`)),
+      ...fingerTerms.map((finger) => `${side}${finger}`),
+      ...fingerTerms.map((finger) => `${side}_${finger}`),
+      ...fingerTerms.map((finger) => `${side} ${finger}`),
+    ];
+    for (const node of findBoneNodesByTerms(terms)) {
+      if (!nodes.includes(node)) {
+        nodes.push(node);
+      }
+    }
+  }
+
+  return nodes;
+}
+
+function getFingerNodesFromParts(handSide) {
+  if (!vrmPreviewModelRoot) {
+    return [];
+  }
+
+  const normalizedSide = normalizeBoneKey(handSide).includes("left") ? "left" : "right";
+  const cacheKey = normalizedSide === "left" ? "leftFingerNodes" : "rightFingerNodes";
+  const cached = vrmPreviewModelParts?.[cacheKey];
+  if (Array.isArray(cached) && cached.length) {
+    return cached;
+  }
+
+  const nodes = collectFingerNodes(normalizedSide);
+  if (!vrmPreviewModelParts) {
+    return nodes;
+  }
+
+  vrmPreviewModelParts[cacheKey] = nodes;
+  return nodes;
+}
+
 function normalizeWeight(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) {
@@ -367,15 +706,13 @@ function startMotionPlayback(motion = getSelectedMotion()) {
     return;
   }
 
-  const sameMotion = state.playbackMotionId === motion.id;
   state.isPlaying = true;
   state.playbackMotionId = motion.id;
-  if (!sameMotion) {
-    state.playbackTime = 0;
-    state.playbackProgress = 0;
-  }
+  state.playbackTime = 0;
+  state.playbackProgress = 0;
   state.playing = motion.displayName;
   render();
+  renderPreviewFrame();
 }
 
 function stopMotionPlayback() {
@@ -427,9 +764,29 @@ function applyMotionData(rawData) {
   }
 }
 
+function readDatasetSnapshot(datasetId) {
+  const datasetKey = getDatasetSaveKey(datasetId);
+  const storedDataset = readJsonStorage(datasetKey);
+  if (storedDataset) {
+    return storedDataset;
+  }
+
+  const hasDatasetRegistry = Boolean(readJsonStorage(DATASET_REGISTRY_KEY));
+  if (!hasDatasetRegistry && datasetId === DATASET_SOURCES[0]?.id) {
+    const legacySnapshot = readJsonStorage(STORAGE_KEY);
+    if (legacySnapshot) {
+      return legacySnapshot;
+    }
+  }
+
+  return null;
+}
+
 function serializeState() {
   return {
     schemaVersion: STORAGE_SCHEMA_VERSION,
+    datasetId: state.datasetId,
+    datasetLabel: state.datasetLabel,
     motions: cloneMotionList(motions),
     ui: {
       selectedId: state.selectedId,
@@ -437,13 +794,86 @@ function serializeState() {
       tag: state.tag,
       playing: state.playing,
       sceneCameraPreset: state.sceneCameraPreset,
+      showVrmTools: state.showVrmTools,
+      vrmHandTarget: state.vrmHandTarget,
+      vrmHandPreset: state.vrmHandPreset,
     },
   };
 }
 
+function buildDatasetExportName() {
+  return `${state.datasetId || "dataset"}.json`;
+}
+
+function exportCurrentDataset() {
+  const snapshot = serializeState();
+  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = buildDatasetExportName();
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  state.saveStatus = "Dataset exported";
+  render();
+}
+
+function normalizeImportedDataset(payload) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  if (Number(payload.schemaVersion) === STORAGE_SCHEMA_VERSION) {
+    return payload;
+  }
+
+  const extractedMotions = extractMotionEntries(payload).map(normalizeMotion).filter(Boolean);
+  const ui = payload.ui && typeof payload.ui === "object" ? payload.ui : {};
+
+  return {
+    schemaVersion: STORAGE_SCHEMA_VERSION,
+    datasetId: state.datasetId,
+    datasetLabel: state.datasetLabel,
+    motions: extractedMotions,
+    tags: Array.isArray(payload.tags) ? payload.tags : undefined,
+    ui: {
+      selectedId: typeof ui.selectedId === "string" ? ui.selectedId : state.selectedId,
+      search: typeof ui.search === "string" ? ui.search : state.search,
+      tag: typeof ui.tag === "string" ? ui.tag : state.tag,
+      playing: typeof ui.playing === "string" ? ui.playing : state.playing,
+      sceneCameraPreset: typeof ui.sceneCameraPreset === "string" ? ui.sceneCameraPreset : state.sceneCameraPreset,
+      showVrmTools: typeof ui.showVrmTools === "boolean" ? ui.showVrmTools : state.showVrmTools,
+      vrmHandTarget: typeof ui.vrmHandTarget === "string" ? ui.vrmHandTarget : state.vrmHandTarget,
+      vrmHandPreset: typeof ui.vrmHandPreset === "string" ? ui.vrmHandPreset : state.vrmHandPreset,
+    },
+  };
+}
+
+async function importDatasetFile(file) {
+  const text = await file.text();
+  const payload = JSON.parse(text);
+  const snapshot = normalizeImportedDataset(payload);
+
+  if (!snapshot) {
+    throw new Error("Invalid dataset JSON.");
+  }
+
+  state.datasetLabel = typeof snapshot.datasetLabel === "string" && snapshot.datasetLabel.trim()
+    ? snapshot.datasetLabel.trim()
+    : state.datasetLabel;
+  writeJsonStorage(getDatasetSaveKey(state.datasetId), snapshot);
+  writeJsonStorage(STORAGE_KEY, snapshot);
+  saveDatasetRegistry(state.datasetId);
+  state.saveStatus = "Dataset imported";
+  await loadDatasetManifest(state.datasetId);
+}
+
 function persistState(label = "Saved locally") {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+    const snapshot = serializeState();
+    writeJsonStorage(getDatasetSaveKey(state.datasetId), snapshot);
+    writeJsonStorage(STORAGE_KEY, snapshot);
+    saveDatasetRegistry(state.datasetId);
     state.saveStatus = label;
   } catch (error) {
     state.saveStatus = "Save failed";
@@ -454,6 +884,7 @@ function persistState(label = "Saved locally") {
 
 function clearSavedState() {
   try {
+    localStorage.removeItem(getDatasetSaveKey(state.datasetId));
     localStorage.removeItem(STORAGE_KEY);
     for (const key of LEGACY_STORAGE_KEYS) {
       localStorage.removeItem(key);
@@ -476,17 +907,32 @@ function hydrateState(snapshot) {
     ? snapshot.motions.map(normalizeMotion).filter(Boolean)
     : [];
   const ui = snapshot?.ui ?? {};
+  const datasetId = typeof snapshot?.datasetId === "string" && snapshot.datasetId.trim()
+    ? snapshot.datasetId.trim()
+    : state.datasetId;
 
   applyMotionData({
     motions: loadedMotions.length ? loadedMotions : DEFAULT_MOTIONS,
     tags: snapshot?.tags,
   });
 
+  state.datasetId = datasetId;
+  state.datasetLabel = typeof snapshot?.datasetLabel === "string" && snapshot.datasetLabel.trim()
+    ? snapshot.datasetLabel.trim()
+    : getDatasetSourceEntry(datasetId).label;
+
   state.selectedId = typeof ui.selectedId === "string" ? ui.selectedId : state.selectedId;
   state.search = typeof ui.search === "string" ? ui.search : state.search;
   state.tag = typeof ui.tag === "string" ? ui.tag : state.tag;
   state.playing = typeof ui.playing === "string" ? ui.playing : state.playing;
   state.sceneCameraPreset = typeof ui.sceneCameraPreset === "string" ? ui.sceneCameraPreset : state.sceneCameraPreset;
+  state.showVrmTools = typeof ui.showVrmTools === "boolean" ? ui.showVrmTools : state.showVrmTools;
+  state.vrmHandTarget = typeof ui.vrmHandTarget === "string" && VRM_HAND_TARGETS.includes(ui.vrmHandTarget)
+    ? ui.vrmHandTarget
+    : state.vrmHandTarget;
+  state.vrmHandPreset = typeof ui.vrmHandPreset === "string" && VRM_HAND_PRESETS.includes(ui.vrmHandPreset)
+    ? ui.vrmHandPreset
+    : state.vrmHandPreset;
 
   if (!motions.some((motion) => motion.id === state.selectedId)) {
     state.selectedId = motions[0]?.id ?? "";
@@ -500,28 +946,7 @@ function hydrateState(snapshot) {
 }
 
 function restoreSavedState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-
-    if (!raw) {
-      state.saveStatus = "No local save";
-      return false;
-    }
-
-    const snapshot = JSON.parse(raw);
-    if (!hydrateState(snapshot)) {
-      state.saveStatus = "No compatible local save";
-      state.error = "";
-      return false;
-    }
-    state.saveStatus = "Loaded from local save";
-    state.error = "";
-    return true;
-  } catch (error) {
-    state.saveStatus = "Load failed";
-    state.error = "Failed to read local save data.";
-    return false;
-  }
+  return hydrateState(readDatasetSnapshot(state.datasetId));
 }
 
 function findMotionFromQuery() {
@@ -573,6 +998,23 @@ function renderTagFilters() {
   }
 }
 
+function renderDatasetSelector() {
+  if (!refs.datasetSelect) {
+    return;
+  }
+
+  if (!refs.datasetSelect.options.length) {
+    for (const entry of DATASET_SOURCES) {
+      const option = document.createElement("option");
+      option.value = entry.id;
+      option.textContent = entry.label;
+      refs.datasetSelect.appendChild(option);
+    }
+  }
+
+  refs.datasetSelect.value = state.datasetId;
+}
+
 function renderMotionList() {
   const filtered = motions.filter(matchesMotion);
   refs.motionList.innerHTML = "";
@@ -586,7 +1028,7 @@ function renderMotionList() {
     return;
   }
 
-  refs.motionCount.textContent = `${filtered.length} / ${motions.length} items`;
+  refs.motionCount.textContent = `${filtered.length} / ${motions.length} items · ${state.datasetLabel}`;
 
   if (state.error) {
     const errorCard = document.createElement("div");
@@ -607,9 +1049,10 @@ function renderMotionList() {
     const card = document.createElement("article");
     card.className = `motion-card${motion.id === state.selectedId ? " active" : ""}`;
     card.tabIndex = 0;
+    const sourceKind = isVrmDatasetMotion(motion) ? "VRMA" : isBvhSource(motion.source) ? "BVH" : "Motion";
     card.innerHTML = `
       <div class="motion-title"><span>${motion.displayName}</span><span>${motion.id}</span></div>
-      <div class="motion-subtitle">${motion.alias || "No alias"}${motion.content || motion.style ? ` · ${[motion.content, motion.style].filter(Boolean).join(" / ")}` : ""} · ${motion.source}</div>
+      <div class="motion-subtitle">${motion.alias || "No alias"}${motion.content || motion.style ? ` · ${[motion.content, motion.style].filter(Boolean).join(" / ")}` : ""} · ${sourceKind} · ${motion.source}</div>
       <div class="tag-row">
         ${motion.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}
       </div>
@@ -622,9 +1065,48 @@ function renderMotionList() {
       render();
     });
     card.addEventListener("dblclick", () => {
-      window.location.href = `./vrm-motion.html?motion=${encodeURIComponent(motion.id)}`;
+      state.selectedId = motion.id;
+      syncPlaybackToSelection(true);
+      startMotionPlayback(motion);
     });
     refs.motionList.appendChild(card);
+  }
+}
+
+function renderVrmToolsPanel() {
+  const section = refs.vrmToolsSection;
+  if (!section) {
+    return;
+  }
+
+  const visible = datasetHasVrmMotions();
+  section.hidden = !visible;
+  if (!visible) {
+    return;
+  }
+
+  section.classList.toggle("is-collapsed", !state.showVrmTools);
+  if (refs.vrmToolsState) {
+    const targetLabel = getHandPoseLabel(state.vrmHandPreset);
+    refs.vrmToolsState.textContent = state.showVrmTools
+      ? `${targetLabel} · ${state.vrmHandTarget}`
+      : "Collapsed";
+  }
+
+  if (refs.vrmHandTarget && refs.vrmHandTarget.value !== state.vrmHandTarget) {
+    refs.vrmHandTarget.value = state.vrmHandTarget;
+  }
+  if (refs.vrmHandPreset && refs.vrmHandPreset.value !== state.vrmHandPreset) {
+    refs.vrmHandPreset.value = state.vrmHandPreset;
+  }
+  if (refs.vrmToolsNote) {
+    const motion = getSelectedMotion();
+    refs.vrmToolsNote.textContent = motion && isVrmDatasetMotion(motion)
+      ? `${motion.displayName} に手ポーズを適用します。VRMA モーションの補助調整として使えます。`
+      : "VRMA を含むデータセットでのみ表示されます。";
+  }
+  if (refs.applyVrmHandPoseButton) {
+    refs.applyVrmHandPoseButton.disabled = !getSelectedMotion();
   }
 }
 
@@ -663,6 +1145,16 @@ function renderDetails() {
   refs.playingLabel.textContent = state.isPlaying
     ? `Playing: ${playbackMotion?.displayName ?? state.playing}`
     : `Playing: ${state.playing}`;
+  if (refs.playButton) {
+    refs.playButton.classList.toggle("active", state.isPlaying);
+    refs.playButton.textContent = state.isPlaying ? "Playing" : "Play";
+  }
+  if (refs.stopButton) {
+    refs.stopButton.classList.toggle("active", !state.isPlaying);
+  }
+  if (refs.loopButton) {
+    refs.loopButton.classList.toggle("active", Boolean(getCurrentMotion()?.loop));
+  }
   refs.sceneViewNote.textContent = `Scene View: ${state.sceneCameraPreset} / rotate ${state.previewRotationY}° / ${state.previewAutoRotate ? "auto rotate on" : "auto rotate off"} / drag to pan / wheel to zoom`;
   const seekValue = Math.max(0, Math.min(100, Math.round((state.playbackProgress || 0) * 100)));
   if (refs.seekLabel && Number(refs.seekLabel.value) !== seekValue) {
@@ -670,6 +1162,9 @@ function renderDetails() {
   }
   refs.timelineProgress.style.width = `${Math.max(8, Math.min(100, seekValue))}%`;
   refs.loadedVrmLabel.textContent = state.loadedVrmName ? `Loaded: ${state.loadedVrmName}` : "No VRM loaded.";
+  if (refs.vrmaRuntimeSummary) {
+    refs.vrmaRuntimeSummary.textContent = getVrmaRuntimeSummary(motion);
+  }
   refs.footerSummary.textContent = state.error
     ? `${motion.displayName} / ${motion.id} · fallback data`
     : `${motion.displayName} / ${motion.id}`;
@@ -684,14 +1179,16 @@ function bindDetailInput(input, updater) {
       return;
     }
     updater(motion, input.value);
-    render();
+    persistState("Saved locally");
   });
 }
 
 function render() {
+  renderDatasetSelector();
   renderSceneCameraButtons();
   renderTagFilters();
   renderMotionList();
+  renderVrmToolsPanel();
   renderDetails();
   updateBonePreviewVisibility();
 }
@@ -822,15 +1319,27 @@ function renderPreviewFrame() {
   const motion = getCurrentMotion();
   const progress = updatePlaybackProgress(motion, deltaSeconds);
   if (motion && isBvhSource(motion.source)) {
-    const runtime = motionRuntimeCache.get(motion.source);
+    const runtime = bvhMotionRuntimeCache.get(motion.source);
     if (runtime?.ready) {
       applyBvhMotionPose(runtime, motion);
     } else {
       void ensureMotionRuntime(motion);
       applyMotionPose(motion, progress, state.playbackTime);
     }
+  } else if (motion && isVrmaSource(motion.source)) {
+    const runtime = vrmaMotionRuntimeCache.get(motion.source);
+    if (runtime?.ready) {
+      applyVrmaMotionPose(runtime, motion, progress);
+    } else {
+      void ensureVrmaMotionRuntime(motion);
+      applyMotionPose(motion, progress, state.playbackTime);
+    }
   } else {
     applyMotionPose(motion, progress, state.playbackTime);
+  }
+  vrmPreviewVrm?.update?.(deltaSeconds);
+  if (refs.vrmaRuntimeSummary) {
+    refs.vrmaRuntimeSummary.textContent = getVrmaRuntimeSummary(motion);
   }
   updatePreviewContentVisibility();
   if (state.previewAutoRotate && vrmPreviewRoot && !state.isPlaying) {
@@ -1292,8 +1801,9 @@ function applyMotionPose(motion, progress, elapsedSeconds) {
     const handNode = hand.includes("left") ? resolveMotionSlotNode("leftHand") : resolveMotionSlotNode("rightHand");
     const armNode = hand.includes("left") ? leftArmNode : rightArmNode;
     if (handNode) {
-      handNode.rotation.x += pose.includes("closed") || pose.includes("grip") ? -0.28 * weight : 0.1 * weight;
-      handNode.rotation.y += pose.includes("wave") ? 0.25 * weight : 0;
+      const poseBias = getHandPoseBias(pose);
+      handNode.rotation.x += poseBias * weight;
+      handNode.rotation.y += pose.includes("wave") ? 0.25 * weight : pose.includes("relax") ? 0.03 * weight : 0;
       handNode.rotation.z += hand.includes("left") ? -0.08 * weight : 0.08 * weight;
     }
     if (armNode) {
@@ -1316,6 +1826,74 @@ function applyMotionPose(motion, progress, elapsedSeconds) {
   }
 }
 
+function applyFingerAdjustments(motion, blend = 1) {
+  if (!motion) {
+    return;
+  }
+
+  const fingerAdjustments = Array.isArray(motion.fingerAdjustments) ? motion.fingerAdjustments : [];
+  const leftArmNode = resolveMotionSlotNode("leftArm");
+  const rightArmNode = resolveMotionSlotNode("rightArm");
+
+  for (const entry of fingerAdjustments) {
+    const hand = normalizeBoneKey(entry.hand);
+    const pose = normalizeBoneKey(entry.pose);
+    const weight = normalizeWeight(entry.weight) * blend;
+    if (!weight) {
+      continue;
+    }
+
+    const handNode = hand.includes("left") ? resolveMotionSlotNode("leftHand") : resolveMotionSlotNode("rightHand");
+    const armNode = hand.includes("left") ? leftArmNode : rightArmNode;
+    const fingerNodes = hand.includes("left")
+      ? getFingerNodesFromParts("left")
+      : getFingerNodesFromParts("right");
+    if (handNode) {
+      const poseBias = getHandPoseBias(pose);
+      handNode.rotation.x += poseBias * weight;
+      handNode.rotation.y += pose.includes("wave") ? 0.25 * weight : pose.includes("relax") ? 0.03 * weight : 0;
+      handNode.rotation.z += hand.includes("left") ? -0.08 * weight : 0.08 * weight;
+    }
+    if (armNode) {
+      armNode.rotation.z += pose.includes("wave")
+        ? (hand.includes("left") ? 0.18 : -0.18) * weight
+        : 0;
+    }
+
+    if (fingerNodes.length) {
+      const closed = pose.includes("close") || pose.includes("grip") || pose.includes("fist");
+      const spread = pose.includes("open") || pose.includes("spread");
+      const relax = pose.includes("relax");
+      for (const node of fingerNodes) {
+        const name = normalizeBoneKey(node.name || node.type || "");
+        const isThumb = name.includes("thumb");
+        const isIndex = name.includes("index");
+        const isMiddle = name.includes("middle");
+        const isRing = name.includes("ring");
+        const isLittle = name.includes("little") || name.includes("pinky");
+        const groupBias = isThumb ? 0.55 : isIndex ? 1.0 : isMiddle ? 0.95 : isRing ? 0.9 : isLittle ? 0.85 : 0.8;
+        const curl = closed ? -0.65 : spread ? 0.26 : relax ? -0.12 : 0.12;
+        const sideBias = hand.includes("left") ? -1 : 1;
+        node.rotation.x += curl * groupBias * weight;
+        node.rotation.y += (isThumb ? 0.12 : 0.03) * sideBias * weight;
+        node.rotation.z += (isThumb ? -0.06 : 0.02) * sideBias * weight;
+      }
+    }
+  }
+}
+
+function applyVrmaMotionPose(runtime, motion, progress) {
+  if (!runtime?.ready || !runtime.clip || !runtime.mixer || !motion) {
+    return false;
+  }
+
+  const duration = runtime.clip.duration || parseDurationSeconds(motion.duration);
+  const time = motion.loop ? (state.playbackTime % duration) : Math.min(state.playbackTime, duration);
+  runtime.mixer.setTime(time);
+  applyFingerAdjustments(motion, progress);
+  return true;
+}
+
 function applyBvhMotionPose(runtime, motion) {
   if (!runtime?.ready || !runtime.root || !motion) {
     return false;
@@ -1333,24 +1911,46 @@ function applyBvhMotionPose(runtime, motion) {
 
   const bvhTargets = {
     hips: findSourceBone(runtime, "hips") ?? findSourceBone(runtime, "root"),
+    spine: findSourceBone(runtime, "spine") ?? findSourceBone(runtime, "spine1"),
     chest: findSourceBone(runtime, "chest") ?? findSourceBone(runtime, "spine"),
+    neck: findSourceBone(runtime, "neck"),
     head: findSourceBone(runtime, "head") ?? findSourceBone(runtime, "neck"),
+    leftShoulder: findSourceBone(runtime, "leftShoulder") ?? findSourceBone(runtime, "leftClavicle"),
+    rightShoulder: findSourceBone(runtime, "rightShoulder") ?? findSourceBone(runtime, "rightClavicle"),
     leftArm: findSourceBone(runtime, "leftArm") ?? findSourceBone(runtime, "leftShoulder"),
     rightArm: findSourceBone(runtime, "rightArm") ?? findSourceBone(runtime, "rightShoulder"),
+    leftForeArm: findSourceBone(runtime, "leftForeArm") ?? findSourceBone(runtime, "leftArm"),
+    rightForeArm: findSourceBone(runtime, "rightForeArm") ?? findSourceBone(runtime, "rightArm"),
+    leftUpLeg: findSourceBone(runtime, "leftUpLeg") ?? findSourceBone(runtime, "leftLeg"),
+    rightUpLeg: findSourceBone(runtime, "rightUpLeg") ?? findSourceBone(runtime, "rightLeg"),
     leftLeg: findSourceBone(runtime, "leftLeg") ?? findSourceBone(runtime, "leftUpLeg"),
     rightLeg: findSourceBone(runtime, "rightLeg") ?? findSourceBone(runtime, "rightUpLeg"),
     leftHand: findSourceBone(runtime, "leftHand") ?? findSourceBone(runtime, "leftForeArm"),
     rightHand: findSourceBone(runtime, "rightHand") ?? findSourceBone(runtime, "rightForeArm"),
+    leftFoot: findSourceBone(runtime, "leftFoot") ?? findSourceBone(runtime, "leftLeg"),
+    rightFoot: findSourceBone(runtime, "rightFoot") ?? findSourceBone(runtime, "rightLeg"),
   };
 
   const targetNodes = {
     hips: resolveMotionSlotNode("hips") ?? vrmPreviewModelParts?.hips ?? null,
+    spine: resolveMotionSlotNode("spine") ?? vrmPreviewModelParts?.spine ?? null,
     chest: resolveMotionSlotNode("chest") ?? vrmPreviewModelParts?.chest ?? null,
+    neck: resolveMotionSlotNode("neck") ?? vrmPreviewModelParts?.neck ?? null,
     head: resolveMotionSlotNode("head") ?? vrmPreviewModelParts?.head ?? null,
+    leftShoulder: resolveMotionSlotNode("leftShoulder") ?? vrmPreviewModelParts?.leftShoulder ?? null,
+    rightShoulder: resolveMotionSlotNode("rightShoulder") ?? vrmPreviewModelParts?.rightShoulder ?? null,
     leftArm: resolveMotionSlotNode("leftArm") ?? vrmPreviewModelParts?.leftArm ?? null,
     rightArm: resolveMotionSlotNode("rightArm") ?? vrmPreviewModelParts?.rightArm ?? null,
+    leftForeArm: resolveMotionSlotNode("leftForeArm") ?? vrmPreviewModelParts?.leftForeArm ?? null,
+    rightForeArm: resolveMotionSlotNode("rightForeArm") ?? vrmPreviewModelParts?.rightForeArm ?? null,
+    leftUpLeg: resolveMotionSlotNode("leftUpLeg") ?? vrmPreviewModelParts?.leftUpLeg ?? null,
+    rightUpLeg: resolveMotionSlotNode("rightUpLeg") ?? vrmPreviewModelParts?.rightUpLeg ?? null,
     leftLeg: resolveMotionSlotNode("leftLeg") ?? vrmPreviewModelParts?.leftLeg ?? null,
     rightLeg: resolveMotionSlotNode("rightLeg") ?? vrmPreviewModelParts?.rightLeg ?? null,
+    leftHand: resolveMotionSlotNode("leftHand") ?? vrmPreviewModelParts?.leftHand ?? null,
+    rightHand: resolveMotionSlotNode("rightHand") ?? vrmPreviewModelParts?.rightHand ?? null,
+    leftFoot: resolveMotionSlotNode("leftFoot") ?? vrmPreviewModelParts?.leftFoot ?? null,
+    rightFoot: resolveMotionSlotNode("rightFoot") ?? vrmPreviewModelParts?.rightFoot ?? null,
   };
 
   for (const [slot, sourceNode] of Object.entries(bvhTargets)) {
@@ -1358,16 +1958,16 @@ function applyBvhMotionPose(runtime, motion) {
     if (!sourceNode || !targetNode) {
       continue;
     }
-    applySourceRelativeRotation(targetNode, sourceNode, runtime.restPose, 1);
+    applySourceRelativeRotationForSlot(slot, targetNode, sourceNode, runtime.restPose, 1);
   }
 
   const leftHand = findSourceBone(runtime, "leftHand") ?? findSourceBone(runtime, "leftForeArm");
   const rightHand = findSourceBone(runtime, "rightHand") ?? findSourceBone(runtime, "rightForeArm");
   if (leftHand && vrmPreviewModelParts?.leftHand) {
-    applySourceRelativeRotation(vrmPreviewModelParts.leftHand, leftHand, runtime.restPose, 1);
+    applySourceRelativeRotationForSlot("leftHand", vrmPreviewModelParts.leftHand, leftHand, runtime.restPose, 1);
   }
   if (rightHand && vrmPreviewModelParts?.rightHand) {
-    applySourceRelativeRotation(vrmPreviewModelParts.rightHand, rightHand, runtime.restPose, 1);
+    applySourceRelativeRotationForSlot("rightHand", vrmPreviewModelParts.rightHand, rightHand, runtime.restPose, 1);
   }
 
   return true;
@@ -1376,40 +1976,83 @@ function applyBvhMotionPose(runtime, motion) {
 function collectModelParts(root) {
   const lookup = {
     hips: null,
+    spine: null,
     chest: null,
+    neck: null,
     head: null,
+    leftShoulder: null,
+    rightShoulder: null,
     leftArm: null,
     rightArm: null,
+    leftForeArm: null,
+    rightForeArm: null,
+    leftUpLeg: null,
+    rightUpLeg: null,
     leftLeg: null,
     rightLeg: null,
     leftHand: null,
     rightHand: null,
+    leftFoot: null,
+    rightFoot: null,
+    leftFingerNodes: [],
+    rightFingerNodes: [],
   };
 
   const matches = (name, terms) => terms.some((term) => name.includes(term));
 
   root.traverse?.((child) => {
     const name = String(child.name || child.type || "").toLowerCase();
-    if (!lookup.head && matches(name, ["head", "neck", "face"])) {
+    if (!lookup.head && matches(name, ["head", "face"])) {
       lookup.head = child;
-    } else if (!lookup.chest && matches(name, ["chest", "spine", "upperchest", "upper_body"])) {
+    } else if (!lookup.neck && matches(name, ["neck"])) {
+      lookup.neck = child;
+    } else if (!lookup.chest && matches(name, ["chest", "upperchest", "upper_body"])) {
       lookup.chest = child;
+    } else if (!lookup.spine && matches(name, ["spine", "spine1", "spine2", "torso", "upperbody"])) {
+      lookup.spine = child;
     } else if (!lookup.hips && matches(name, ["hips", "pelvis", "root", "body"])) {
       lookup.hips = child;
+    } else if (!lookup.leftShoulder && matches(name, ["leftshoulder", "shoulderl", "claviclel"])) {
+      lookup.leftShoulder = child;
+    } else if (!lookup.rightShoulder && matches(name, ["rightshoulder", "shoulderr", "clavicler"])) {
+      lookup.rightShoulder = child;
     } else if (!lookup.leftArm && matches(name, ["leftarm", "left_arm", "arm_l", "l_arm", "shoulderl", "upperarm_l"])) {
       lookup.leftArm = child;
     } else if (!lookup.rightArm && matches(name, ["rightarm", "right_arm", "arm_r", "r_arm", "shoulderr", "upperarm_r"])) {
       lookup.rightArm = child;
-    } else if (!lookup.leftLeg && matches(name, ["leftleg", "left_leg", "leg_l", "l_leg", "thighl", "upperleg_l"])) {
+    } else if (!lookup.leftForeArm && matches(name, ["leftforearm", "left_forearm", "forearm_l", "l_forearm", "lowerarm_l"])) {
+      lookup.leftForeArm = child;
+    } else if (!lookup.rightForeArm && matches(name, ["rightforearm", "right_forearm", "forearm_r", "r_forearm", "lowerarm_r"])) {
+      lookup.rightForeArm = child;
+    } else if (!lookup.leftUpLeg && matches(name, ["leftupleg", "left_up_leg", "upleg_l", "upperleg_l", "leftthigh"])) {
+      lookup.leftUpLeg = child;
+    } else if (!lookup.rightUpLeg && matches(name, ["rightupleg", "right_up_leg", "upleg_r", "upperleg_r", "rightthigh"])) {
+      lookup.rightUpLeg = child;
+    } else if (!lookup.leftLeg && matches(name, ["leftleg", "left_leg", "leg_l", "l_leg", "shin_l", "lowerleg_l", "calf_l"])) {
       lookup.leftLeg = child;
-    } else if (!lookup.rightLeg && matches(name, ["rightleg", "right_leg", "leg_r", "r_leg", "thighr", "upperleg_r"])) {
+    } else if (!lookup.rightLeg && matches(name, ["rightleg", "right_leg", "leg_r", "r_leg", "shin_r", "lowerleg_r", "calf_r"])) {
       lookup.rightLeg = child;
     } else if (!lookup.leftHand && matches(name, ["lefthand", "left_hand", "hand_l", "l_hand", "leftwrist", "wrist_l"])) {
       lookup.leftHand = child;
     } else if (!lookup.rightHand && matches(name, ["righthand", "right_hand", "hand_r", "r_hand", "rightwrist", "wrist_r"])) {
       lookup.rightHand = child;
+    } else if (!lookup.leftFoot && matches(name, ["leftfoot", "left_foot", "foot_l", "l_foot", "leftankle", "ankle_l"])) {
+      lookup.leftFoot = child;
+    } else if (!lookup.rightFoot && matches(name, ["rightfoot", "right_foot", "foot_r", "r_foot", "rightankle", "ankle_r"])) {
+      lookup.rightFoot = child;
     }
   });
+
+  lookup.leftFingerNodes = findBoneNodesByTerms([
+    "leftthumb", "left_index", "leftmiddle", "leftring", "leftlittle",
+    "thumb_l", "index_l", "middle_l", "ring_l", "little_l", "pinky_l",
+    "leftthumb1", "leftindex1", "leftmiddle1", "leftring1", "leftlittle1",
+  ]);
+  lookup.rightFingerNodes = findBoneNodesByTerms([
+    "rightthumb", "right_index", "rightmiddle", "rightring", "rightlittle",
+    "thumb_r", "index_r", "middle_r", "ring_r", "little_r", "pinky_r",
+    "rightthumb1", "rightindex1", "rightmiddle1", "rightring1", "rightlittle1",
+  ]);
 
   return lookup;
 }
@@ -1448,6 +2091,229 @@ function normalizeBoneKey(value) {
 
 function isBvhSource(source) {
   return typeof source === "string" && /\.bvh(\?.*)?$/i.test(source);
+}
+
+function isVrmaSource(source) {
+  return typeof source === "string" && /\.vrma(\?.*)?$/i.test(source);
+}
+
+const VRMA_BONE_SLOT_MAP = {
+  hips: "hips",
+  spine: "spine",
+  chest: "chest",
+  upperChest: "chest",
+  neck: "neck",
+  head: "head",
+  leftShoulder: "leftShoulder",
+  rightShoulder: "rightShoulder",
+  leftUpperArm: "leftArm",
+  rightUpperArm: "rightArm",
+  leftLowerArm: "leftForeArm",
+  rightLowerArm: "rightForeArm",
+  leftHand: "leftHand",
+  rightHand: "rightHand",
+  leftUpperLeg: "leftUpLeg",
+  rightUpperLeg: "rightUpLeg",
+  leftLowerLeg: "leftLeg",
+  rightLowerLeg: "rightLeg",
+  leftFoot: "leftFoot",
+  rightFoot: "rightFoot",
+  leftToes: "leftFoot",
+  rightToes: "rightFoot",
+};
+
+function getVrmaNodeNameMap(gltf) {
+  const json = gltf?.parser?.json ?? {};
+  const extension = json.extensions?.VRMC_vrm_animation
+    ?? gltf?.userData?.gltfExtensions?.VRMC_vrm_animation
+    ?? null;
+  const humanBones = extension?.humanoid?.humanBones ?? {};
+  const nodes = Array.isArray(json.nodes) ? json.nodes : [];
+  const nodeNameMap = new Map();
+
+  for (const [humanBoneName, descriptor] of Object.entries(humanBones)) {
+    const nodeIndex = Number(descriptor?.node);
+    const sourceNode = Number.isInteger(nodeIndex) ? nodes[nodeIndex] : null;
+    const sourceNodeName = typeof sourceNode?.name === "string" ? sourceNode.name.trim() : "";
+    if (!sourceNodeName) {
+      continue;
+    }
+
+    const targetNode = resolveVrmaTargetNode(sourceNodeName, humanBoneName);
+    if (!targetNode) {
+      continue;
+    }
+
+    const targetName = typeof targetNode.name === "string" && targetNode.name.trim()
+      ? targetNode.name.trim()
+      : sourceNodeName;
+    nodeNameMap.set(sourceNodeName, targetName);
+  }
+
+  return nodeNameMap;
+}
+
+function resolveVrmaTargetNode(sourceNodeName, humanBoneName) {
+  const exactMatch = resolveMotionBoneNode(sourceNodeName);
+  if (isBoneLikeNode(exactMatch)) {
+    return exactMatch;
+  }
+
+  const fingerMatch = resolveVrmaFingerTargetNode(sourceNodeName, humanBoneName);
+  if (fingerMatch) {
+    return fingerMatch;
+  }
+
+  const toeMatch = resolveVrmaToeTargetNode(sourceNodeName, humanBoneName);
+  if (toeMatch) {
+    return toeMatch;
+  }
+
+  const slot = VRMA_BONE_SLOT_MAP[humanBoneName] ?? "";
+  if (slot) {
+    const slotMatch = resolveMotionSlotNode(slot);
+    if (isBoneLikeNode(slotMatch)) {
+      return slotMatch;
+    }
+  }
+
+  return findBoneOptionByTerms([sourceNodeName, humanBoneName], { strict: true });
+}
+
+function resolveVrmaFingerTargetNode(sourceNodeName, humanBoneName) {
+  const normalized = normalizeBoneKey(sourceNodeName || humanBoneName || "");
+  const match = normalized.match(/^(left|right)(thumb|index|middle|ring|little)(metacarpal|proximal|intermediate|distal)$/);
+  if (!match) {
+    return null;
+  }
+
+  const side = match[1] === "left" ? "Left" : "Right";
+  const finger = match[2].charAt(0).toUpperCase() + match[2].slice(1);
+  const segment = match[3];
+  const segmentIndex = match[2] === "thumb"
+    ? (segment === "metacarpal" ? 1 : segment === "proximal" ? 2 : 3)
+    : (segment === "proximal" || segment === "metacarpal" ? 1 : segment === "intermediate" ? 2 : 3);
+  const candidateName = `${side}Hand${finger}${segmentIndex}`;
+  const candidate = resolveMotionBoneNode(candidateName);
+  if (isBoneLikeNode(candidate)) {
+    return candidate;
+  }
+  return findBoneOptionByTerms([candidateName, normalized], { strict: true });
+}
+
+function resolveVrmaToeTargetNode(sourceNodeName, humanBoneName) {
+  const normalized = normalizeBoneKey(sourceNodeName || humanBoneName || "");
+  if (!normalized.includes("toe")) {
+    return null;
+  }
+
+  const side = normalized.startsWith("left") ? "left" : normalized.startsWith("right") ? "right" : "";
+  if (!side) {
+    return null;
+  }
+
+  const candidates = [
+    `${side}toeBase`,
+    `${side}toe`,
+    `${side}foot`,
+  ];
+
+  for (const candidateName of candidates) {
+    const node = resolveMotionBoneNode(candidateName);
+    if (isBoneLikeNode(node)) {
+      return node;
+    }
+  }
+
+  return null;
+}
+
+function getVrmaRuntimeSummary(motion) {
+  if (!motion || !isVrmaSource(motion.source)) {
+    return "No VRMA motion selected.";
+  }
+
+  const runtime = vrmaMotionRuntimeCache.get(motion.source);
+  if (!runtime) {
+    return "VRMA runtime not initialized yet.";
+  }
+  if (runtime.loading) {
+    return "VRMA runtime loading...";
+  }
+  if (runtime.error) {
+    return `VRMA runtime error: ${runtime.error}`;
+  }
+  if (!runtime.ready) {
+    return "VRMA runtime not ready.";
+  }
+
+  const missing = Array.isArray(runtime.missingTrackNames) ? runtime.missingTrackNames.slice(0, 4) : [];
+  const missingSuffix = missing.length
+    ? ` · missing: ${missing.join(", ")}${runtime.missingTrackNames.length > missing.length ? "..." : ""}`
+    : "";
+  return `VRMA tracks: ${runtime.mappedTrackCount}/${runtime.sourceTrackCount} mapped${missingSuffix}`;
+}
+
+function buildNodeNameSet(root) {
+  const names = new Set();
+
+  root?.traverse?.((child) => {
+    const name = String(child.name || "").trim();
+    if (name) {
+      names.add(name);
+      names.add(normalizeBoneKey(name));
+    }
+    const type = String(child.type || "").trim();
+    if (type) {
+      names.add(type);
+      names.add(normalizeBoneKey(type));
+    }
+  });
+
+  return names;
+}
+
+function remapAnimationClip(clip, nodeNameMap, targetNameSet = new Set()) {
+  if (!clip) {
+    return {
+      clip: null,
+      sourceTrackCount: 0,
+      mappedTrackCount: 0,
+      missingTrackNames: [],
+    };
+  }
+
+  const sourceTrackCount = Array.isArray(clip.tracks) ? clip.tracks.length : 0;
+  const missingTrackNames = [];
+  const tracks = clip.tracks.map((track) => {
+    const originalName = String(track.name || "");
+    const lastDot = originalName.lastIndexOf(".");
+    if (lastDot === -1) {
+      return track.clone();
+    }
+
+    const nodeName = originalName.slice(0, lastDot);
+    const propertyPath = originalName.slice(lastDot + 1);
+    const mappedName = nodeNameMap.get(nodeName);
+    const candidateName = mappedName || nodeName;
+    const candidateKey = normalizeBoneKey(candidateName);
+    if (targetNameSet.size && !targetNameSet.has(candidateName) && !targetNameSet.has(candidateKey)) {
+      missingTrackNames.push(originalName);
+      return null;
+    }
+    const clonedTrack = track.clone();
+    if (mappedName) {
+      clonedTrack.name = `${mappedName}.${propertyPath}`;
+    }
+    return clonedTrack;
+  }).filter(Boolean);
+
+  return {
+    clip: new THREE.AnimationClip(clip.name || "vrma", clip.duration, tracks),
+    sourceTrackCount,
+    mappedTrackCount: tracks.length,
+    missingTrackNames,
+  };
 }
 
 function buildSourceBoneIndex(root) {
@@ -1549,12 +2415,42 @@ function applySourceRelativeRotation(targetNode, sourceNode, sourceRestPose, ble
   targetNode.rotation.setFromQuaternion(targetCurrent, targetNode.rotation.order);
 }
 
+function applySourceRelativeRotationForSlot(slot, targetNode, sourceNode, sourceRestPose, blend = 1) {
+  if (!targetNode || !sourceNode) {
+    return;
+  }
+
+  const targetRest = vrmPreviewRestPose.get(targetNode.uuid)?.quaternion ?? snapshotNodeQuaternion(targetNode);
+  const sourceRest = sourceRestPose?.get(sourceNode.uuid)?.quaternion ?? snapshotNodeQuaternion(sourceNode);
+  const sourceCurrent = snapshotNodeQuaternion(sourceNode);
+
+  const sourceDelta = sourceRest.clone().invert().multiply(sourceCurrent);
+  const correctedDelta = BVH_AXIS_CORRECTION.clone().multiply(sourceDelta).multiply(BVH_AXIS_CORRECTION.clone().invert());
+  const blendedDelta = new THREE.Quaternion().slerpQuaternions(new THREE.Quaternion(), correctedDelta, blend);
+  const targetCurrent = targetRest.clone().multiply(blendedDelta);
+  const isFootSlot = normalizeBoneKey(slot).includes("foot");
+  const correctedTarget = isFootSlot
+    ? targetCurrent.clone().multiply(FOOT_AXIS_CORRECTION)
+    : targetCurrent;
+
+  if (normalizeBoneKey(slot).startsWith("right")) {
+    const mirrored = new THREE.Euler().setFromQuaternion(correctedTarget, "XYZ");
+    mirrored.x *= -1;
+    targetNode.quaternion.setFromEuler(mirrored);
+    targetNode.rotation.setFromQuaternion(targetNode.quaternion, targetNode.rotation.order);
+    return;
+  }
+
+  targetNode.quaternion.copy(correctedTarget);
+  targetNode.rotation.setFromQuaternion(correctedTarget, targetNode.rotation.order);
+}
+
 async function ensureMotionRuntime(motion) {
   if (!motion?.source || !isBvhSource(motion.source)) {
     return null;
   }
 
-  const cached = motionRuntimeCache.get(motion.source);
+  const cached = bvhMotionRuntimeCache.get(motion.source);
   if (cached) {
     if (cached.loading) {
       return cached;
@@ -1577,7 +2473,7 @@ async function ensureMotionRuntime(motion) {
     boneIndex: new Map(),
     restPose: new Map(),
   };
-  motionRuntimeCache.set(motion.source, entry);
+  bvhMotionRuntimeCache.set(motion.source, entry);
 
   try {
     const response = await fetch(motion.source);
@@ -1609,6 +2505,108 @@ async function ensureMotionRuntime(motion) {
     entry.mixer = mixer;
     entry.action = action;
     entry.boneIndex = buildSourceBoneIndex(rootBone);
+    entry.ready = true;
+    entry.loading = false;
+  } catch (error) {
+    entry.error = error instanceof Error ? error.message : String(error);
+    entry.loading = false;
+  }
+
+  return entry;
+}
+
+async function ensureVrmaMotionRuntime(motion) {
+  if (!motion?.source || !isVrmaSource(motion.source)) {
+    return null;
+  }
+
+  const cached = vrmaMotionRuntimeCache.get(motion.source);
+  if (cached) {
+    if (cached.loading) {
+      return cached;
+    }
+    if (cached.ready || cached.error) {
+      return cached;
+    }
+  }
+
+  const entry = {
+    source: motion.source,
+    loading: true,
+    ready: false,
+    error: "",
+    group: null,
+    root: null,
+    clip: null,
+    mixer: null,
+    action: null,
+    nodeNameMap: new Map(),
+    sourceTrackCount: 0,
+    mappedTrackCount: 0,
+    missingTrackNames: [],
+  };
+  vrmaMotionRuntimeCache.set(motion.source, entry);
+
+  try {
+    const loader = ensureVrmLoaderPlugins(vrmaMotionLoader ?? (vrmaMotionLoader = new GLTFLoader()));
+    const gltf = await loader.loadAsync(motion.source);
+    const vrmAnimation = gltf?.userData?.vrmAnimations?.[0] ?? null;
+    const sourceClip = gltf?.animations?.[0] ?? null;
+    if (!vrmAnimation && !sourceClip) {
+      throw new Error("VRMA animation clip not found.");
+    }
+
+    const vrm = vrmPreviewVrm ?? null;
+    const root = vrm?.scene ?? vrmPreviewModelRoot ?? vrmPreviewRoot;
+    if (!root) {
+      throw new Error("VRM preview root not ready.");
+    }
+
+    const nodeNameMap = getVrmaNodeNameMap(gltf);
+    const targetNameSet = buildNodeNameSet(root);
+    let clip = null;
+    let sourceTrackCount = sourceClip?.tracks?.length ?? 0;
+    let mappedTrackCount = sourceTrackCount;
+    let missingTrackNames = [];
+
+    if (vrmAnimation && vrm) {
+      clip = createVRMAnimationClip(vrmAnimation, vrm);
+      sourceTrackCount = clip.tracks.length;
+      mappedTrackCount = clip.tracks.length;
+    } else if (sourceClip) {
+      const remapped = nodeNameMap.size
+        ? remapAnimationClip(sourceClip, nodeNameMap, targetNameSet)
+        : {
+            clip: sourceClip.clone(),
+            sourceTrackCount: sourceClip.tracks.length,
+            mappedTrackCount: sourceClip.tracks.length,
+            missingTrackNames: [],
+          };
+      clip = remapped.clip;
+      sourceTrackCount = remapped.sourceTrackCount;
+      mappedTrackCount = remapped.mappedTrackCount;
+      missingTrackNames = remapped.missingTrackNames;
+    }
+    if (!clip) {
+      throw new Error("VRMA animation clip remap failed.");
+    }
+
+    const mixer = new THREE.AnimationMixer(vrm?.scene ?? root);
+    const action = mixer.clipAction(clip);
+    action.loop = motion.loop ? THREE.LoopRepeat : THREE.LoopOnce;
+    action.clampWhenFinished = !motion.loop;
+    action.reset();
+    action.play();
+
+    entry.group = root;
+    entry.root = root;
+    entry.clip = clip;
+    entry.mixer = mixer;
+    entry.action = action;
+    entry.nodeNameMap = nodeNameMap;
+    entry.sourceTrackCount = sourceTrackCount;
+    entry.mappedTrackCount = mappedTrackCount;
+    entry.missingTrackNames = missingTrackNames;
     entry.ready = true;
     entry.loading = false;
   } catch (error) {
@@ -1665,7 +2663,8 @@ function buildPreviewBoneIndex() {
   }
 }
 
-function findBoneOptionByTerms(terms) {
+function findBoneOptionByTerms(terms, options = {}) {
+  const strict = Boolean(options.strict);
   const normalizedTerms = terms.map(normalizeBoneKey).filter(Boolean);
   const candidates = vrmPreviewBoneOptions.filter((entry) => {
     const label = normalizeBoneKey(entry.label);
@@ -1678,6 +2677,10 @@ function findBoneOptionByTerms(terms) {
 
   if (preferBone?.node) {
     return preferBone.node;
+  }
+
+  if (strict) {
+    return null;
   }
 
   const fallback = candidates
@@ -1761,6 +2764,14 @@ function isBoneLikeType(type) {
   return normalized.includes("bone") || normalized.includes("armature") || normalized.includes("group");
 }
 
+function isBoneLikeNode(node) {
+  if (!node) {
+    return false;
+  }
+
+  return node.isBone || isBoneLikeType(node.type) || isBoneLikeType(node.name);
+}
+
 function applyBoneMapToParts() {
   if (!vrmPreviewModelRoot && !vrmPreviewRig) {
     return;
@@ -1769,34 +2780,70 @@ function applyBoneMapToParts() {
   const fallback = vrmPreviewRig?.userData.parts ?? {};
   const mapped = {
     hips: resolveBoneMapNode(state.boneMap.hips, ""),
+    spine: resolveBoneMapNode(state.boneMap.spine, ""),
     chest: resolveBoneMapNode(state.boneMap.chest, ""),
+    neck: resolveBoneMapNode(state.boneMap.neck, ""),
     head: resolveBoneMapNode(state.boneMap.head, ""),
+    leftShoulder: resolveBoneMapNode(state.boneMap.leftShoulder, ""),
+    rightShoulder: resolveBoneMapNode(state.boneMap.rightShoulder, ""),
     leftArm: resolveBoneMapNode(state.boneMap.leftArm, ""),
     rightArm: resolveBoneMapNode(state.boneMap.rightArm, ""),
+    leftForeArm: resolveBoneMapNode(state.boneMap.leftForeArm, ""),
+    rightForeArm: resolveBoneMapNode(state.boneMap.rightForeArm, ""),
+    leftUpLeg: resolveBoneMapNode(state.boneMap.leftUpLeg, ""),
+    rightUpLeg: resolveBoneMapNode(state.boneMap.rightUpLeg, ""),
     leftLeg: resolveBoneMapNode(state.boneMap.leftLeg, ""),
     rightLeg: resolveBoneMapNode(state.boneMap.rightLeg, ""),
+    leftHand: resolveBoneMapNode(state.boneMap.leftHand, ""),
+    rightHand: resolveBoneMapNode(state.boneMap.rightHand, ""),
+    leftFoot: resolveBoneMapNode(state.boneMap.leftFoot, ""),
+    rightFoot: resolveBoneMapNode(state.boneMap.rightFoot, ""),
   };
 
   vrmPreviewModelParts = {
     hips: mapped.hips ?? fallback.hips ?? null,
+    spine: mapped.spine ?? fallback.spine ?? null,
     chest: mapped.chest ?? fallback.chest ?? null,
+    neck: mapped.neck ?? fallback.neck ?? null,
     head: mapped.head ?? fallback.head ?? null,
+    leftShoulder: mapped.leftShoulder ?? fallback.leftShoulder ?? null,
+    rightShoulder: mapped.rightShoulder ?? fallback.rightShoulder ?? null,
     leftArm: mapped.leftArm ?? fallback.leftArm ?? null,
     rightArm: mapped.rightArm ?? fallback.rightArm ?? null,
+    leftForeArm: mapped.leftForeArm ?? fallback.leftForeArm ?? null,
+    rightForeArm: mapped.rightForeArm ?? fallback.rightForeArm ?? null,
+    leftUpLeg: mapped.leftUpLeg ?? fallback.leftUpLeg ?? null,
+    rightUpLeg: mapped.rightUpLeg ?? fallback.rightUpLeg ?? null,
     leftLeg: mapped.leftLeg ?? fallback.leftLeg ?? null,
     rightLeg: mapped.rightLeg ?? fallback.rightLeg ?? null,
+    leftHand: mapped.leftHand ?? fallback.leftHand ?? null,
+    rightHand: mapped.rightHand ?? fallback.rightHand ?? null,
+    leftFoot: mapped.leftFoot ?? fallback.leftFoot ?? null,
+    rightFoot: mapped.rightFoot ?? fallback.rightFoot ?? null,
   };
 }
 
 function populateBoneControls() {
   const selectRefs = {
     hips: refs.boneMapHips,
+    spine: refs.boneMapSpine,
     chest: refs.boneMapChest,
+    neck: refs.boneMapNeck,
     head: refs.boneMapHead,
+    leftShoulder: refs.boneMapLeftShoulder,
+    rightShoulder: refs.boneMapRightShoulder,
     leftArm: refs.boneMapLeftArm,
     rightArm: refs.boneMapRightArm,
+    leftForeArm: refs.boneMapLeftForeArm,
+    rightForeArm: refs.boneMapRightForeArm,
+    leftUpLeg: refs.boneMapLeftUpLeg,
+    rightUpLeg: refs.boneMapRightUpLeg,
     leftLeg: refs.boneMapLeftLeg,
     rightLeg: refs.boneMapRightLeg,
+    leftHand: refs.boneMapLeftHand,
+    rightHand: refs.boneMapRightHand,
+    leftFoot: refs.boneMapLeftFoot,
+    rightFoot: refs.boneMapRightFoot,
   };
 
   const emptyOption = '<option value="">(auto)</option>';
@@ -1808,6 +2855,7 @@ function populateBoneControls() {
     if (!select) {
       continue;
     }
+    select.classList.toggle("is-required-slot", REQUIRED_BONE_SLOTS.includes(slot));
     select.innerHTML = emptyOption + optionHtml;
     select.value = state.boneMap[slot] || "";
     select.onchange = () => {
@@ -1843,13 +2891,19 @@ function populateBoneControls() {
   if (refs.boneResolveCount || refs.boneResolveSummary) {
     const resolvedLines = Object.entries(state.boneMap).map(([slot, key]) => {
       const resolved = key ? vrmPreviewBoneOptions.find((entry) => entry.key === key) : null;
-      return `${slot}: ${resolved ? `${resolved.label} (${resolved.type})` : "auto / unresolved"}`;
+      const required = REQUIRED_BONE_SLOTS.includes(slot) ? "required" : "optional";
+      return `${slot} [${required}]: ${resolved ? `${resolved.label} (${resolved.type})` : "auto / unresolved"}`;
+    });
+    const requiredLines = REQUIRED_BONE_SLOTS.map((slot) => {
+      const key = state.boneMap[slot] || "";
+      const resolved = key ? vrmPreviewBoneOptions.find((entry) => entry.key === key) : null;
+      return `${slot}: ${resolved ? `${resolved.label}` : "unresolved"}`;
     });
     if (refs.boneResolveCount) {
       refs.boneResolveCount.textContent = String(Object.values(state.boneMap).filter(Boolean).length);
     }
     if (refs.boneResolveSummary) {
-      refs.boneResolveSummary.textContent = resolvedLines.join(" · ");
+      refs.boneResolveSummary.textContent = `Required: ${requiredLines.join(" · ")} | All: ${resolvedLines.join(" · ")}`;
     }
   }
 }
@@ -1861,12 +2915,14 @@ async function loadVrmPreview(source, label) {
 
   const token = ++state.loadedVrmToken;
   const previousUrl = state.loadedVrmUrl;
+  bvhMotionRuntimeCache.clear();
+  vrmaMotionRuntimeCache.clear();
   state.loadedVrmName = label || source;
   state.loadedVrmUrl = source;
   refs.loadedVrmLabel.textContent = `Loading: ${state.loadedVrmName}`;
   render();
 
-  const loader = vrmPreviewLoader ?? (vrmPreviewLoader = new GLTFLoader());
+  const loader = ensureVrmLoaderPlugins(vrmPreviewLoader ?? (vrmPreviewLoader = new GLTFLoader()));
 
   try {
     const gltf = await loader.loadAsync(source);
@@ -1875,6 +2931,7 @@ async function loadVrmPreview(source, label) {
     }
 
     clearPreviewModel();
+    vrmPreviewVrm = gltf.userData?.vrm ?? null;
     const modelRoot = gltf.scene ?? gltf.scenes?.[0] ?? null;
     if (!modelRoot) {
       throw new Error("No scene found in VRM asset.");
@@ -1891,18 +2948,31 @@ async function loadVrmPreview(source, label) {
     fitPreviewModel(modelRoot);
     state.previewOffsetX = 0;
     state.previewOffsetY = 0;
+    state.previewZoom = 1;
     state.bonePreviewZoom = 1;
     vrmPreviewBoneOptions = collectBoneOptions(modelRoot);
     buildPreviewBoneIndex();
     capturePreviewRestPose();
     state.boneMap = {
       hips: guessBoneMap(vrmPreviewBoneOptions, ["hips", "pelvis", "root", "body"]) || state.boneMap.hips,
+      spine: guessBoneMap(vrmPreviewBoneOptions, ["spine", "spine1", "torso"]) || state.boneMap.spine,
       chest: guessBoneMap(vrmPreviewBoneOptions, ["chest", "spine", "upper"]) || state.boneMap.chest,
-      head: guessBoneMap(vrmPreviewBoneOptions, ["head", "neck", "face"]) || state.boneMap.head,
-      leftArm: guessBoneMap(vrmPreviewBoneOptions, ["leftarm", "arm_l", "l_arm", "shoulderl", "upperarm_l"]) || state.boneMap.leftArm,
-      rightArm: guessBoneMap(vrmPreviewBoneOptions, ["rightarm", "arm_r", "r_arm", "shoulderr", "upperarm_r"]) || state.boneMap.rightArm,
-      leftLeg: guessBoneMap(vrmPreviewBoneOptions, ["leftleg", "leg_l", "l_leg", "thighl", "upperleg_l"]) || state.boneMap.leftLeg,
-      rightLeg: guessBoneMap(vrmPreviewBoneOptions, ["rightleg", "leg_r", "r_leg", "thighr", "upperleg_r"]) || state.boneMap.rightLeg,
+      neck: guessBoneMap(vrmPreviewBoneOptions, ["neck"]) || state.boneMap.neck,
+      head: guessBoneMap(vrmPreviewBoneOptions, ["head", "face"]) || state.boneMap.head,
+      leftShoulder: guessBoneMap(vrmPreviewBoneOptions, ["leftshoulder", "claviclel"]) || state.boneMap.leftShoulder,
+      rightShoulder: guessBoneMap(vrmPreviewBoneOptions, ["rightshoulder", "clavicler"]) || state.boneMap.rightShoulder,
+      leftArm: guessBoneMap(vrmPreviewBoneOptions, ["leftarm", "arm_l", "l_arm", "upperarm_l"]) || state.boneMap.leftArm,
+      rightArm: guessBoneMap(vrmPreviewBoneOptions, ["rightarm", "arm_r", "r_arm", "upperarm_r"]) || state.boneMap.rightArm,
+      leftForeArm: guessBoneMap(vrmPreviewBoneOptions, ["leftforearm", "forearm_l", "lowerarm_l"]) || state.boneMap.leftForeArm,
+      rightForeArm: guessBoneMap(vrmPreviewBoneOptions, ["rightforearm", "forearm_r", "lowerarm_r"]) || state.boneMap.rightForeArm,
+      leftUpLeg: guessBoneMap(vrmPreviewBoneOptions, ["leftupleg", "upperleg_l", "leftthigh"]) || state.boneMap.leftUpLeg,
+      rightUpLeg: guessBoneMap(vrmPreviewBoneOptions, ["rightupleg", "upperleg_r", "rightthigh"]) || state.boneMap.rightUpLeg,
+      leftLeg: guessBoneMap(vrmPreviewBoneOptions, ["leftleg", "leg_l", "l_leg", "lowerleg_l", "shin_l", "calf_l"]) || state.boneMap.leftLeg,
+      rightLeg: guessBoneMap(vrmPreviewBoneOptions, ["rightleg", "leg_r", "r_leg", "lowerleg_r", "shin_r", "calf_r"]) || state.boneMap.rightLeg,
+      leftHand: guessBoneMap(vrmPreviewBoneOptions, ["lefthand", "hand_l", "wrist_l"]) || state.boneMap.leftHand,
+      rightHand: guessBoneMap(vrmPreviewBoneOptions, ["righthand", "hand_r", "wrist_r"]) || state.boneMap.rightHand,
+      leftFoot: guessBoneMap(vrmPreviewBoneOptions, ["leftfoot", "footl", "ankle_l", "lefttoe"]) || state.boneMap.leftFoot,
+      rightFoot: guessBoneMap(vrmPreviewBoneOptions, ["rightfoot", "footr", "ankle_r", "righttoe"]) || state.boneMap.rightFoot,
     };
     vrmPreviewModelParts = collectModelParts(modelRoot);
     applyBoneMapToParts();
@@ -1927,6 +2997,7 @@ async function loadVrmPreview(source, label) {
     vrmPreviewBoneOptions = [];
     vrmPreviewBoneIndex = new Map();
     vrmPreviewRestPose = new Map();
+    vrmPreviewVrm = null;
     populateBoneControls();
     updatePreviewContentVisibility();
     render();
@@ -1937,52 +3008,26 @@ async function loadVrmPreview(source, label) {
 }
 
 async function loadMotionManifest() {
-  for (const source of MANIFEST_SOURCES) {
-    try {
-      const response = await fetch(new URL(source, import.meta.url));
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      applyMotionData(data);
-      state.error = "";
-      state.loading = false;
-      const targetId = findMotionFromQuery();
-      if (targetId && motions.some((motion) => motion.id === targetId)) {
-        state.selectedId = targetId;
-      }
-      if (!state.selectedId && motions[0]) {
-        state.selectedId = motions[0].id;
-      }
-      render();
-      return;
-    } catch (error) {
-      // Try the next source.
-    }
-  }
-
-  applyMotionData(null);
-  state.error = "Motion manifest could not be loaded. Using fallback data.";
-  state.loading = false;
-
-  const targetId = findMotionFromQuery();
-  if (targetId && motions.some((motion) => motion.id === targetId)) {
-    state.selectedId = targetId;
-  }
-
-  if (!state.selectedId && motions[0]) {
-    state.selectedId = motions[0].id;
-  }
-
+  state.loading = true;
   render();
+
+  try {
+    await loadDatasetManifest(state.datasetId, { preferSavedState: false });
+    state.error = "";
+  } catch (error) {
+    applyMotionData(null);
+    state.error = "Motion dataset could not be loaded. Using fallback data.";
+    state.loading = false;
+    state.saveStatus = "Load failed";
+    render();
+  }
 }
 
-function init() {
+async function init() {
   refs.motionList = document.getElementById("motionList");
   refs.motionCount = document.getElementById("motionCount");
   refs.tagFilters = document.getElementById("tagFilters");
+  refs.datasetSelect = document.getElementById("datasetSelect");
   refs.motionSearch = document.getElementById("motionSearch");
   refs.playingLabel = document.getElementById("playingLabel");
   refs.sceneViewNote = document.getElementById("sceneViewNote");
@@ -1997,13 +3042,26 @@ function init() {
   refs.detailTags = document.getElementById("detailTags");
   refs.detailPriority = document.getElementById("detailPriority");
   refs.detailLoop = document.getElementById("detailLoop");
+  refs.vrmaRuntimeSummary = document.getElementById("vrmaRuntimeSummary");
   refs.boneMapHips = document.getElementById("boneMapHips");
+  refs.boneMapSpine = document.getElementById("boneMapSpine");
   refs.boneMapChest = document.getElementById("boneMapChest");
+  refs.boneMapNeck = document.getElementById("boneMapNeck");
   refs.boneMapHead = document.getElementById("boneMapHead");
+  refs.boneMapLeftShoulder = document.getElementById("boneMapLeftShoulder");
+  refs.boneMapRightShoulder = document.getElementById("boneMapRightShoulder");
   refs.boneMapLeftArm = document.getElementById("boneMapLeftArm");
   refs.boneMapRightArm = document.getElementById("boneMapRightArm");
+  refs.boneMapLeftForeArm = document.getElementById("boneMapLeftForeArm");
+  refs.boneMapRightForeArm = document.getElementById("boneMapRightForeArm");
+  refs.boneMapLeftUpLeg = document.getElementById("boneMapLeftUpLeg");
+  refs.boneMapRightUpLeg = document.getElementById("boneMapRightUpLeg");
   refs.boneMapLeftLeg = document.getElementById("boneMapLeftLeg");
   refs.boneMapRightLeg = document.getElementById("boneMapRightLeg");
+  refs.boneMapLeftHand = document.getElementById("boneMapLeftHand");
+  refs.boneMapRightHand = document.getElementById("boneMapRightHand");
+  refs.boneMapLeftFoot = document.getElementById("boneMapLeftFoot");
+  refs.boneMapRightFoot = document.getElementById("boneMapRightFoot");
   refs.boneNameList = document.getElementById("boneNameList");
   refs.boneNameCount = document.getElementById("boneNameCount");
   refs.boneResolveCount = document.getElementById("boneResolveCount");
@@ -2018,6 +3076,16 @@ function init() {
   refs.saveButton = document.getElementById("saveButton");
   refs.loadButton = document.getElementById("loadButton");
   refs.clearLocalSaveButton = document.getElementById("clearLocalSaveButton");
+  refs.exportDatasetButton = document.getElementById("exportDatasetButton");
+  refs.importDatasetButton = document.getElementById("importDatasetButton");
+  refs.datasetFileInput = document.getElementById("datasetFileInput");
+  refs.vrmToolsSection = document.getElementById("vrmToolsSection");
+  refs.vrmToolsToggle = document.getElementById("vrmToolsToggle");
+  refs.vrmToolsState = document.getElementById("vrmToolsState");
+  refs.vrmHandTarget = document.getElementById("vrmHandTarget");
+  refs.vrmHandPreset = document.getElementById("vrmHandPreset");
+  refs.applyVrmHandPoseButton = document.getElementById("applyVrmHandPoseButton");
+  refs.vrmToolsNote = document.getElementById("vrmToolsNote");
   refs.loadVrmButton = document.getElementById("loadVrmButton");
   refs.previewAutoRotateButton = document.getElementById("previewAutoRotateButton");
   refs.vrmFileInput = document.getElementById("vrmFileInput");
@@ -2030,6 +3098,12 @@ function init() {
   refs.tabButtons = [...document.querySelectorAll(".tab")];
   refs.sceneCameraButtons = [...document.querySelectorAll("[data-scene-camera]")];
   refs.previewRotateButtons = [...document.querySelectorAll("[data-preview-rotate]")];
+
+  const registryDatasetId = loadDatasetRegistry();
+  if (registryDatasetId) {
+    state.datasetId = registryDatasetId;
+    state.datasetLabel = getDatasetSourceEntry(registryDatasetId).label;
+  }
 
   setupVrmPreview();
   bonePreviewCanvas = refs.bonePreviewCanvas;
@@ -2081,17 +3155,96 @@ function init() {
 
   refs.loadButton.addEventListener("click", () => {
     const restored = restoreSavedState();
-
     if (!restored) {
-      render();
+      void loadDatasetManifest(state.datasetId, { preferSavedState: false });
       return;
     }
-
     render();
   });
 
   refs.clearLocalSaveButton.addEventListener("click", () => {
     clearSavedState();
+    void loadDatasetManifest(state.datasetId);
+  });
+
+  refs.exportDatasetButton.addEventListener("click", () => {
+    exportCurrentDataset();
+  });
+
+  refs.importDatasetButton.addEventListener("click", () => {
+    refs.datasetFileInput?.click();
+  });
+
+  refs.vrmToolsToggle?.addEventListener("click", () => {
+    state.showVrmTools = !state.showVrmTools;
+    persistState("Saved locally");
+    render();
+  });
+
+  refs.vrmHandTarget?.addEventListener("change", () => {
+    const next = refs.vrmHandTarget.value;
+    if (VRM_HAND_TARGETS.includes(next)) {
+      state.vrmHandTarget = next;
+      persistState("Saved locally");
+      render();
+    }
+  });
+
+  refs.vrmHandPreset?.addEventListener("change", () => {
+    const next = refs.vrmHandPreset.value;
+    if (VRM_HAND_PRESETS.includes(next)) {
+      state.vrmHandPreset = next;
+      persistState("Saved locally");
+      render();
+    }
+  });
+
+  refs.applyVrmHandPoseButton?.addEventListener("click", () => {
+    const motion = getSelectedMotion();
+    if (!motion) {
+      return;
+    }
+
+    motion.fingerAdjustments = state.vrmHandPreset === "reset"
+      ? []
+      : buildFingerAdjustmentsForHand(state.vrmHandTarget, state.vrmHandPreset);
+
+    persistState("Saved locally");
+    render();
+  });
+
+  refs.datasetFileInput.addEventListener("change", async () => {
+    const file = refs.datasetFileInput.files?.[0];
+    refs.datasetFileInput.value = "";
+    if (!file) {
+      return;
+    }
+
+    try {
+      await importDatasetFile(file);
+    } catch (error) {
+      state.error = "Dataset import failed.";
+      state.saveStatus = "Import failed";
+      render();
+    }
+  });
+
+  refs.datasetSelect?.addEventListener("change", async () => {
+    const nextDatasetId = refs.datasetSelect.value;
+    if (!nextDatasetId || nextDatasetId === state.datasetId) {
+      return;
+    }
+
+    persistState("Saved locally");
+    state.loading = true;
+    render();
+    try {
+      await loadDatasetManifest(nextDatasetId, { preferSavedState: false });
+    } catch (error) {
+      state.loading = false;
+      state.error = `Failed to load ${nextDatasetId}.`;
+      render();
+    }
   });
 
   refs.loadVrmButton.addEventListener("click", () => {
@@ -2236,16 +3389,7 @@ function init() {
   });
 
   render();
-  if (!restoreSavedState()) {
-    loadMotionManifest();
-  } else {
-    state.loading = false;
-    const targetId = findMotionFromQuery();
-    if (targetId && motions.some((motion) => motion.id === targetId)) {
-      state.selectedId = targetId;
-    }
-    render();
-  }
+  await loadMotionManifest();
 
   void loadVrmPreview(STANDARD_VRM_SOURCE, STANDARD_VRM_LABEL);
 }

@@ -1,0 +1,5 @@
+{
+  "id": "dataset1",
+  "label": "Dataset 1",
+  "extends": "../vrm-motion-dataset.json"
+}
