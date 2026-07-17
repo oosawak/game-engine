@@ -344,6 +344,11 @@
       cursor: pointer;
     }
 
+    .motion-card-button.secondary {
+      border-color: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
     .motion-card-button:hover {
       background: rgba(108, 193, 255, 0.18);
     }
@@ -361,6 +366,79 @@
       border: 1px solid rgba(255, 255, 255, 0.08);
       color: var(--muted);
       font-size: 11px;
+    }
+
+    .checkbox-field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .checkbox-field input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+    }
+
+    .camera-capture-stage {
+      position: relative;
+      aspect-ratio: 4 / 3;
+      min-height: 180px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background:
+        radial-gradient(circle at center, rgba(255, 255, 255, 0.08), transparent 62%),
+        linear-gradient(180deg, #111723 0%, #0d121c 100%);
+    }
+
+    .camera-capture-stage video,
+    .camera-capture-stage canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .camera-capture-stage canvas {
+      pointer-events: none;
+    }
+
+    .camera-capture-badge {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(13, 16, 22, 0.82);
+      border: 1px solid var(--border);
+      color: var(--accent-2);
+      font-size: 11px;
+      pointer-events: none;
+      max-width: calc(100% - 20px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .camera-capture-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .camera-capture-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
     }
 
     .preview {
@@ -747,7 +825,7 @@
         <button class="mini-button">Preset Pose</button>
         <button class="mini-button" id="loadVrmButton" type="button">Load VRM</button>
         <input id="vrmFileInput" type="file" accept=".vrm,.glb,.gltf" hidden />
-        <input id="datasetFileInput" type="file" accept=".json" hidden />
+        <input id="datasetFileInput" type="file" accept=".json,.vrma" hidden />
         <button class="mini-button" id="saveButton" type="button">Save</button>
         <button class="mini-button active" id="loadButton" type="button">Load</button>
         <button class="mini-button" id="clearLocalSaveButton" type="button">Clear Local Save</button>
@@ -765,6 +843,30 @@
         </div>
         <div class="panel-body">
           <div class="panel-tools">
+            <button class="mini-button" id="createMotionFromCameraButton" type="button">Create from Camera</button>
+            <div class="collapsible is-collapsed" id="cameraCapturePanel">
+              <button class="collapsible-header" id="cameraCaptureToggleButton" type="button">
+                <span>Camera Capture</span>
+                <span class="collapsible-state" id="cameraCaptureState">Closed</span>
+              </button>
+              <div class="collapsible-body">
+                <label class="field">
+                  <div class="field-label"><span>Motion Name</span><span>Draft</span></div>
+                  <input id="cameraCaptureNameInput" class="input" type="text" placeholder="Camera motion name" />
+                </label>
+                <div class="camera-capture-stage">
+                  <video id="cameraCaptureVideo" autoplay muted playsinline></video>
+                  <canvas id="cameraCaptureOverlay"></canvas>
+                  <div class="camera-capture-badge" id="cameraCaptureOverlayBadge">Camera idle</div>
+                </div>
+                <div class="camera-capture-actions">
+                  <button class="mini-button" id="cameraCaptureStartButton" type="button">Start Camera</button>
+                  <button class="mini-button" id="cameraCaptureStopButton" type="button">Stop Camera</button>
+                  <button class="mini-button active" id="cameraCaptureCreateButton" type="button">Capture Motion</button>
+                </div>
+                <div class="camera-capture-note" id="cameraCaptureNote">Click Create from Camera to begin.</div>
+              </div>
+            </div>
             <input id="motionSearch" class="search-input" type="search" placeholder="Search by id / alias / name" />
             <div class="group">
               <button class="mini-button" id="exportDatasetButton" type="button">Export JSON</button>
@@ -888,6 +990,15 @@
               <input id="detailLoop" class="input" type="text" value="false" />
               </label>
             </div>
+            <label class="checkbox-field">
+              <span>Shared Asset</span>
+              <input id="detailSharedAsset" type="checkbox" />
+            </label>
+            <button class="mini-button" id="detailSaveButton" type="button">Save Common Data</button>
+            <div class="field">
+              <div class="field-label"><span>Camera Capture</span><span id="cameraCaptureSummary">No camera capture</span></div>
+              <div class="note" id="cameraCaptureDetail">Camera capture is available from the Motion List.</div>
+            </div>
             <div class="note">
               `alias` は検索や一覧表示に使い、`id` はスクリプトからの安定参照に使います。
               表示名を変えても壊れないようにするのが目的です。
@@ -1008,7 +1119,8 @@
         "three": "https://cdn.jsdelivr.net/npm/three@0.167.1/build/three.module.js",
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.1/examples/jsm/",
         "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.5.5/lib/three-vrm.module.js",
-        "@pixiv/three-vrm-animation": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm-animation@3.5.5/lib/three-vrm-animation.module.js"
+        "@pixiv/three-vrm-animation": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm-animation@3.5.5/lib/three-vrm-animation.module.js",
+        "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs"
       }
     }
   </script>

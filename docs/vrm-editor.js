@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin } from "@pixiv/three-vrm";
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from "@pixiv/three-vrm-animation";
+import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 
 const DEFAULT_MOTIONS = [];
 
@@ -32,6 +33,13 @@ const state = {
   loading: true,
   error: "",
   saveStatus: "Unsaved",
+  cameraCaptureOpen: false,
+  cameraCaptureActive: false,
+  cameraCaptureReady: false,
+  cameraCaptureStatus: "Camera idle.",
+  cameraCaptureError: "",
+  cameraCaptureName: "",
+  cameraCaptureHint: "Click Create from Camera to begin.",
   sceneCameraPreset: "front",
   previewRotationY: 0,
   previewAutoRotate: false,
@@ -74,6 +82,7 @@ const state = {
 
 const refs = {};
 let motions = cloneMotionList(DEFAULT_MOTIONS);
+let motionSnapshotCache = new Map();
 let tags = [...DEFAULT_TAGS];
 let vrmPreview = null;
 let vrmPreviewScene = null;
@@ -96,6 +105,15 @@ let vrmaMotionLoader = null;
 let vrmPreviewBoneIndex = new Map();
 let vrmPreviewRestPose = new Map();
 let vrmaMotionRuntimeCache = new Map();
+let cameraCaptureStream = null;
+let cameraCaptureVideo = null;
+let cameraCaptureOverlay = null;
+let cameraCaptureContext = null;
+let cameraCaptureLandmarker = null;
+let cameraCaptureInitPromise = null;
+let cameraCaptureFrameHandle = 0;
+let cameraCaptureLatestResult = null;
+let cameraCaptureSessionId = 0;
 let bonePreviewCanvas = null;
 let bonePreviewScene = null;
 let bonePreviewCamera = null;
@@ -122,6 +140,8 @@ const DATASET_SOURCES = [
 ];
 const STANDARD_VRM_SOURCE = "./assets/vrm/standard/standard.vrm";
 const STANDARD_VRM_LABEL = "Standard VRM";
+const MEDIAPIPE_VISION_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
+const MEDIAPIPE_POSE_MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const MOTION_PREVIEW_SAMPLE_TIME = 0.0;
 const REQUIRED_BONE_SLOTS = ["leftShoulder", "rightShoulder", "leftFoot", "rightFoot"];
 const BONE_ALIAS_SLOTS = {
@@ -322,7 +342,174 @@ function cloneMotionList(list) {
     expressionAdjustments: cloneExpressionAdjustments(motion.expressionAdjustments),
     fingerAdjustments: cloneFingerAdjustments(motion.fingerAdjustments),
     poseAdjustments: clonePoseAdjustments(motion.poseAdjustments),
+    cameraCapture: cloneCameraCapture(motion.cameraCapture),
   }));
+}
+
+function cloneCameraLandmark(entry) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const x = Number(entry.x);
+  const y = Number(entry.y);
+  const z = Number(entry.z);
+  return {
+    x: Number.isFinite(x) ? x : 0,
+    y: Number.isFinite(y) ? y : 0,
+    z: Number.isFinite(z) ? z : 0,
+    visibility: Number.isFinite(Number(entry.visibility)) ? Number(entry.visibility) : 0,
+    presence: Number.isFinite(Number(entry.presence)) ? Number(entry.presence) : 0,
+  };
+}
+
+function cloneCameraLandmarkSet(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((entry) => cloneCameraLandmark(entry)).filter(Boolean);
+}
+
+function cloneCameraCapture(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  return {
+    provider: typeof value.provider === "string" ? value.provider : "mediapipe",
+    mode: typeof value.mode === "string" ? value.mode : "pose",
+    capturedAt: typeof value.capturedAt === "string" ? value.capturedAt : new Date().toISOString(),
+    frameSize: Array.isArray(value.frameSize)
+      ? value.frameSize.slice(0, 2).map((entry) => {
+        const number = Number(entry);
+        return Number.isFinite(number) ? number : 0;
+      })
+      : [0, 0],
+    score: Number.isFinite(Number(value.score)) ? Number(value.score) : 0,
+    poseLandmarks: cloneCameraLandmarkSet(value.poseLandmarks),
+    poseWorldLandmarks: cloneCameraLandmarkSet(value.poseWorldLandmarks),
+  };
+}
+
+function getMotionSignature(motion) {
+  if (!motion || typeof motion !== "object") {
+    return "";
+  }
+
+  return JSON.stringify({
+    id: motion.id ?? "",
+    alias: motion.alias ?? "",
+    scriptName: motion.scriptName ?? "",
+    displayName: motion.displayName ?? "",
+    content: motion.content ?? "",
+    style: motion.style ?? "",
+    source: motion.source ?? "",
+    tags: [...(motion.tags ?? [])],
+    priority: Number(motion.priority) || 0,
+    loop: Boolean(motion.loop),
+    duration: motion.duration ?? "",
+    boneRotations: cloneBoneRotations(motion.boneRotations),
+    expressionAdjustments: cloneExpressionAdjustments(motion.expressionAdjustments),
+    fingerAdjustments: cloneFingerAdjustments(motion.fingerAdjustments),
+    poseAdjustments: clonePoseAdjustments(motion.poseAdjustments),
+    createdLocally: Boolean(motion.createdLocally),
+    sharedAsset: Boolean(motion.sharedAsset),
+    createdViaCamera: Boolean(motion.createdViaCamera),
+    cameraCapture: cloneCameraCapture(motion.cameraCapture),
+  });
+}
+
+function refreshMotionSnapshotCache(list = motions) {
+  motionSnapshotCache = new Map(list.map((motion) => [motion.id, getMotionSignature(motion)]));
+}
+
+function isMotionDirty(motion) {
+  if (!motion) {
+    return false;
+  }
+
+  return motionSnapshotCache.get(motion.id) !== getMotionSignature(motion);
+}
+
+function sanitizeMotionIdPart(value, fallback = "motion") {
+  const slug = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return slug || fallback;
+}
+
+function createUniqueMotionId(name) {
+  const base = sanitizeMotionIdPart(name);
+  let candidate = `${base}_${Date.now().toString(36)}`;
+  let counter = 2;
+  while (motions.some((motion) => motion.id === candidate)) {
+    candidate = `${base}_${Date.now().toString(36)}_${counter++}`;
+  }
+  return candidate;
+}
+
+function createLocalMotionClone(motion, nextName) {
+  const displayName = String(nextName ?? "").trim() || motion.displayName || motion.id || "Motion";
+  const id = createUniqueMotionId(displayName);
+  const alias = displayName;
+
+  return normalizeMotion(
+    {
+      ...motion,
+      id,
+      alias,
+      scriptName: id,
+      displayName,
+      source: motion.source,
+      createdLocally: true,
+      sharedAsset: Boolean(motion.sharedAsset),
+      createdViaCamera: Boolean(motion.createdViaCamera),
+      cameraCapture: cloneCameraCapture(motion.cameraCapture),
+    },
+    motions.length,
+  );
+}
+
+function createCameraMotionClone(motion, nextName) {
+  const clone = createLocalMotionClone(motion, nextName);
+  if (!clone) {
+    return null;
+  }
+
+  clone.sharedAsset = true;
+  clone.createdViaCamera = true;
+  clone.cameraCapture = cloneCameraCapture(cameraCaptureLatestResult);
+  return clone;
+}
+
+function buildMotionDownloadName(motion) {
+  return `${sanitizeMotionIdPart(motion?.displayName || motion?.alias || motion?.id)}.vrma`;
+}
+
+function exportMotionAsVrma(motion) {
+  if (!motion) {
+    return;
+  }
+
+  const payload = {
+    schemaVersion: STORAGE_SCHEMA_VERSION,
+    kind: "vrma-motion",
+    datasetId: state.datasetId,
+    datasetLabel: state.datasetLabel,
+    exportedAt: new Date().toISOString(),
+    motion: cloneMotionList([motion])[0] ?? motion,
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = buildMotionDownloadName(motion);
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function normalize(value) {
@@ -394,6 +581,10 @@ function normalizeMotion(raw, index) {
     expressionAdjustments,
     fingerAdjustments,
     poseAdjustments,
+    createdLocally: Boolean(raw.createdLocally),
+    sharedAsset: Boolean(raw.sharedAsset),
+    createdViaCamera: Boolean(raw.createdViaCamera),
+    cameraCapture: cloneCameraCapture(raw.cameraCapture),
   };
 }
 
@@ -777,6 +968,336 @@ function updateSeekStatus(motion = getCurrentMotion()) {
   }
 }
 
+function updateCameraCaptureStatus(message, error = "") {
+  state.cameraCaptureStatus = message;
+  state.cameraCaptureError = error;
+  if (refs.cameraCaptureState) {
+    refs.cameraCaptureState.textContent = message;
+  }
+  if (refs.cameraCaptureNote) {
+    refs.cameraCaptureNote.textContent = error ? `${message} · ${error}` : message;
+  }
+}
+
+function getCameraCaptureOverlaySize() {
+  const canvas = refs.cameraCaptureOverlay;
+  if (!canvas) {
+    return { width: 0, height: 0, scale: 1 };
+  }
+
+  const parent = canvas.parentElement;
+  if (!parent) {
+    return { width: 0, height: 0, scale: 1 };
+  }
+
+  const width = Math.max(1, Math.floor(parent.clientWidth));
+  const height = Math.max(1, Math.floor(parent.clientHeight));
+  const scale = window.devicePixelRatio || 1;
+  return { width, height, scale };
+}
+
+function resizeCameraCaptureOverlay() {
+  const canvas = refs.cameraCaptureOverlay;
+  if (!canvas) {
+    return null;
+  }
+
+  const { width, height, scale } = getCameraCaptureOverlaySize();
+  if (width < 2 || height < 2) {
+    return null;
+  }
+
+  const nextWidth = Math.round(width * scale);
+  const nextHeight = Math.round(height * scale);
+  if (canvas.width !== nextWidth) {
+    canvas.width = nextWidth;
+  }
+  if (canvas.height !== nextHeight) {
+    canvas.height = nextHeight;
+  }
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  const context = canvas.getContext("2d");
+  if (context) {
+    context.setTransform(scale, 0, 0, scale, 0, 0);
+  }
+  return { width, height, context };
+}
+
+function drawCameraCaptureOverlay(result) {
+  const overlay = resizeCameraCaptureOverlay();
+  if (!overlay?.context) {
+    return;
+  }
+
+  const { width, height, context } = overlay;
+  context.clearRect(0, 0, width, height);
+  context.save();
+  context.fillStyle = "rgba(124, 240, 183, 0.85)";
+  context.strokeStyle = "rgba(108, 193, 255, 0.82)";
+  context.lineWidth = 2;
+
+  const landmarks = Array.isArray(result?.poseLandmarks) && result.poseLandmarks[0]
+    ? result.poseLandmarks[0]
+    : [];
+  const worldLandmarks = Array.isArray(result?.poseWorldLandmarks) && result.poseWorldLandmarks[0]
+    ? result.poseWorldLandmarks[0]
+    : [];
+
+  if (!landmarks.length) {
+    context.fillStyle = "rgba(143, 155, 176, 0.9)";
+    context.font = "12px sans-serif";
+    context.fillText("Move into view to detect a pose.", 12, 22);
+    context.restore();
+    if (refs.cameraCaptureState) {
+      refs.cameraCaptureState.textContent = state.cameraCaptureActive ? "Tracking..." : "Ready";
+    }
+    return;
+  }
+
+  const normalizedPoints = landmarks.map((landmark) => ({
+    x: (1 - Number(landmark.x || 0)) * width,
+    y: Number(landmark.y || 0) * height,
+    z: Number(landmark.z || 0),
+    visibility: Number(landmark.visibility || 0),
+  }));
+
+  const connections = PoseLandmarker.POSE_CONNECTIONS ?? [];
+  context.beginPath();
+  for (const connection of connections) {
+    const start = normalizedPoints[connection.start];
+    const end = normalizedPoints[connection.end];
+    if (!start || !end) {
+      continue;
+    }
+    context.moveTo(start.x, start.y);
+    context.lineTo(end.x, end.y);
+  }
+  context.stroke();
+
+  for (const point of normalizedPoints) {
+    context.beginPath();
+    context.arc(point.x, point.y, point.visibility > 0.5 ? 4 : 3, 0, Math.PI * 2);
+    context.fill();
+  }
+
+  if (worldLandmarks.length) {
+    context.fillStyle = "rgba(124, 240, 183, 0.92)";
+    context.font = "12px sans-serif";
+    context.fillText(`Pose landmarks: ${landmarks.length} / world: ${worldLandmarks.length}`, 12, 22);
+  } else {
+    context.fillStyle = "rgba(124, 240, 183, 0.92)";
+    context.font = "12px sans-serif";
+    context.fillText(`Pose landmarks: ${landmarks.length}`, 12, 22);
+  }
+
+  context.restore();
+
+  if (refs.cameraCaptureOverlayBadge) {
+    refs.cameraCaptureOverlayBadge.textContent = cameraCaptureLatestResult
+      ? `Tracked ${landmarks.length} landmarks`
+      : "Tracking...";
+  }
+}
+
+async function ensureCameraCaptureLandmarker() {
+  if (cameraCaptureLandmarker) {
+    return cameraCaptureLandmarker;
+  }
+
+  if (cameraCaptureInitPromise) {
+    return cameraCaptureInitPromise;
+  }
+
+  cameraCaptureInitPromise = (async () => {
+    const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_VISION_WASM);
+    return PoseLandmarker.createFromOptions(fileset, {
+      baseOptions: {
+        modelAssetPath: MEDIAPIPE_POSE_MODEL,
+      },
+      runningMode: "VIDEO",
+      numPoses: 1,
+    });
+  })();
+
+  try {
+    cameraCaptureLandmarker = await cameraCaptureInitPromise;
+    return cameraCaptureLandmarker;
+  } finally {
+    cameraCaptureInitPromise = null;
+  }
+}
+
+async function startCameraCaptureLoop(sessionId) {
+  if (!refs.cameraCaptureVideo || !cameraCaptureLandmarker) {
+    return;
+  }
+
+  const tick = () => {
+    if (sessionId !== cameraCaptureSessionId || !state.cameraCaptureActive) {
+      return;
+    }
+
+    cameraCaptureFrameHandle = window.requestAnimationFrame(tick);
+
+    const video = refs.cameraCaptureVideo;
+    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      return;
+    }
+
+    try {
+      const now = performance.now();
+      const result = cameraCaptureLandmarker.detectForVideo(video, now);
+      cameraCaptureLatestResult = result;
+      drawCameraCaptureOverlay(result);
+      if (!state.cameraCaptureReady) {
+        state.cameraCaptureReady = true;
+      }
+      updateCameraCaptureStatus(
+        result?.poseLandmarks?.[0]?.length
+          ? `Tracking pose · ${result.poseLandmarks[0].length} landmarks`
+          : "Tracking pose",
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      updateCameraCaptureStatus("Camera tracking error", message);
+    }
+  };
+
+  cameraCaptureFrameHandle = window.requestAnimationFrame(tick);
+}
+
+async function startCameraCaptureSession() {
+  if (!refs.cameraCaptureVideo || !refs.cameraCapturePanel) {
+    return false;
+  }
+
+  if (state.cameraCaptureActive && cameraCaptureStream) {
+    state.cameraCaptureOpen = true;
+    render();
+    return true;
+  }
+
+  if (cameraCaptureStream) {
+    stopCameraCaptureSession();
+  }
+
+  state.cameraCaptureOpen = true;
+  state.cameraCaptureActive = false;
+  state.cameraCaptureReady = false;
+  updateCameraCaptureStatus("Starting camera...", "");
+  render();
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: "user",
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    });
+    cameraCaptureStream = stream;
+    refs.cameraCaptureVideo.srcObject = stream;
+    refs.cameraCaptureVideo.muted = true;
+    refs.cameraCaptureVideo.playsInline = true;
+    await refs.cameraCaptureVideo.play();
+    cameraCaptureVideo = refs.cameraCaptureVideo;
+    cameraCaptureOverlay = refs.cameraCaptureOverlay;
+    cameraCaptureContext = cameraCaptureOverlay?.getContext?.("2d") ?? null;
+    cameraCaptureLandmarker = await ensureCameraCaptureLandmarker();
+    state.cameraCaptureActive = true;
+    state.cameraCaptureHint = "Move into frame, then press Capture Motion.";
+    updateCameraCaptureStatus("Camera ready · tracking pose", "");
+    await startCameraCaptureLoop(++cameraCaptureSessionId);
+    render();
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    state.cameraCaptureActive = false;
+    updateCameraCaptureStatus("Camera unavailable", message);
+    if (cameraCaptureStream) {
+      for (const track of cameraCaptureStream.getTracks()) {
+        track.stop();
+      }
+      cameraCaptureStream = null;
+    }
+    refs.cameraCaptureVideo.srcObject = null;
+    render();
+    return false;
+  }
+}
+
+function stopCameraCaptureSession() {
+  cameraCaptureSessionId += 1;
+  if (cameraCaptureFrameHandle) {
+    window.cancelAnimationFrame(cameraCaptureFrameHandle);
+    cameraCaptureFrameHandle = 0;
+  }
+  if (cameraCaptureStream) {
+    for (const track of cameraCaptureStream.getTracks()) {
+      track.stop();
+    }
+    cameraCaptureStream = null;
+  }
+  if (refs.cameraCaptureVideo) {
+    refs.cameraCaptureVideo.pause?.();
+    refs.cameraCaptureVideo.srcObject = null;
+  }
+  cameraCaptureLatestResult = null;
+  state.cameraCaptureActive = false;
+  updateCameraCaptureStatus(state.cameraCaptureOpen ? "Camera stopped." : "Camera idle.", "");
+  drawCameraCaptureOverlay(null);
+  render();
+}
+
+async function captureCameraMotion() {
+  const sourceMotion = getSelectedMotion() ?? getDefaultMotion();
+  if (!sourceMotion) {
+    updateCameraCaptureStatus("No source motion selected.");
+    return;
+  }
+
+  const name = String(state.cameraCaptureName || "").trim();
+  if (!name) {
+    updateCameraCaptureStatus("Enter a motion name first.");
+    return;
+  }
+
+  if (!cameraCaptureLatestResult?.poseLandmarks?.length) {
+    updateCameraCaptureStatus("No pose detected yet.");
+    return;
+  }
+
+  const clone = createCameraMotionClone(sourceMotion, name);
+  if (!clone) {
+    updateCameraCaptureStatus("Failed to create motion.");
+    return;
+  }
+
+  clone.cameraCapture = cloneCameraCapture({
+    provider: "mediapipe",
+    mode: "pose",
+    capturedAt: new Date().toISOString(),
+    frameSize: cameraCaptureVideo
+      ? [cameraCaptureVideo.videoWidth || 0, cameraCaptureVideo.videoHeight || 0]
+      : [0, 0],
+    score: cameraCaptureLatestResult?.poseLandmarks?.[0]?.length ? 1 : 0,
+    poseLandmarks: cameraCaptureLatestResult.poseLandmarks[0],
+    poseWorldLandmarks: cameraCaptureLatestResult.poseWorldLandmarks?.[0] ?? [],
+  });
+
+  motions = [...motions, clone];
+  state.selectedId = clone.id;
+  state.playbackMotionId = clone.id;
+  state.playing = clone.displayName;
+  state.cameraCaptureOpen = true;
+  state.cameraCaptureHint = `Saved camera motion: ${clone.displayName}`;
+  updateCameraCaptureStatus(`Camera motion saved: ${clone.displayName}`);
+  persistState("Camera motion saved");
+  render();
+}
+
 function pauseMotionPlayback() {
   if (!state.playbackMotionId) {
     return;
@@ -856,6 +1377,7 @@ function applyMotionData(rawData) {
 
   motions = loadedMotions.length ? loadedMotions : cloneMotionList(DEFAULT_MOTIONS);
   tags = uniqueTags(motions, Array.isArray(rawData?.tags) ? rawData.tags : DEFAULT_TAGS);
+  refreshMotionSnapshotCache(motions);
 
   if (state.selectedId && !motions.some((motion) => motion.id === state.selectedId)) {
     state.selectedId = "";
@@ -975,6 +1497,7 @@ function persistState(label = "Saved locally") {
     writeJsonStorage(STORAGE_KEY, snapshot);
     saveDatasetRegistry(state.datasetId);
     state.saveStatus = label;
+    refreshMotionSnapshotCache(motions);
   } catch (error) {
     state.saveStatus = "Save failed";
     state.error = "Failed to write local save data.";
@@ -1143,14 +1666,18 @@ function renderMotionList() {
     card.className = `motion-card${motion.id === state.selectedId ? " active" : ""}`;
     card.tabIndex = 0;
     const sourceKind = isVrmDatasetMotion(motion) ? "VRMA" : "Motion";
+    const dirty = isMotionDirty(motion);
+    const localExport = Boolean(motion.createdLocally || motion.sharedAsset);
     card.innerHTML = `
       <div class="motion-title"><span>${motion.displayName}</span><span>${motion.id}</span></div>
-      <div class="motion-subtitle">${motion.alias || "No alias"}${motion.content || motion.style ? ` · ${[motion.content, motion.style].filter(Boolean).join(" / ")}` : ""} · ${sourceKind} · ${motion.source}</div>
+      <div class="motion-subtitle">${motion.alias || "No alias"}${motion.content || motion.style ? ` · ${[motion.content, motion.style].filter(Boolean).join(" / ")}` : ""} · ${sourceKind} · ${motion.source}${motion.sharedAsset ? " · shared" : ""}${motion.createdViaCamera ? " · camera capture" : ""}</div>
       <div class="tag-row">
         ${motion.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}
       </div>
       <div class="motion-actions">
-        <button class="motion-card-button" type="button">Play</button>
+        <button class="motion-card-button" type="button" data-action="play">Play</button>
+        ${dirty ? `<button class="motion-card-button secondary" type="button" data-action="save">Save</button>` : ""}
+        ${localExport ? `<button class="motion-card-button secondary" type="button" data-action="download">Download</button>` : ""}
       </div>
     `;
     card.addEventListener("click", () => {
@@ -1161,13 +1688,39 @@ function renderMotionList() {
       syncPlaybackToSelection(true);
       startMotionPlayback(motion);
     });
-    const playButton = card.querySelector(".motion-card-button");
+    const playButton = card.querySelector('[data-action="play"]');
     playButton?.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
       state.selectedId = motion.id;
       syncPlaybackToSelection(true);
       startMotionPlayback(motion);
+    });
+    const saveButton = card.querySelector('[data-action="save"]');
+    const downloadButton = card.querySelector('[data-action="download"]');
+    saveButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nextName = window.prompt("Save as new motion name", motion.displayName || motion.alias || motion.id);
+      if (!nextName || !nextName.trim()) {
+        return;
+      }
+      const clone = createLocalMotionClone(motion, nextName);
+      if (!clone) {
+        return;
+      }
+      motions = [...motions, clone];
+      state.selectedId = clone.id;
+      state.playbackMotionId = clone.id;
+      state.playing = clone.displayName;
+      persistState("Motion saved as new VRMA draft");
+    });
+    downloadButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      exportMotionAsVrma(motion);
+      state.saveStatus = `Downloaded ${motion.displayName}.vrma`;
+      render();
     });
     refs.motionList.appendChild(card);
   }
@@ -1185,6 +1738,9 @@ function renderDetails() {
     refs.detailTags.value = "";
     refs.detailPriority.value = "0";
     refs.detailLoop.value = "false";
+    if (refs.detailSharedAsset) {
+      refs.detailSharedAsset.checked = false;
+    }
     refs.overlayId.textContent = "-";
     refs.overlayAlias.textContent = "(none)";
     refs.playingLabel.textContent = "Playing: Stopped";
@@ -1192,6 +1748,12 @@ function renderDetails() {
     refs.loadedVrmLabel.textContent = state.loadedVrmName ? `Loaded: ${state.loadedVrmName}` : "No VRM loaded.";
     refs.footerSummary.textContent = "No motion data";
     refs.saveStatus.textContent = state.saveStatus;
+    if (refs.cameraCaptureSummary) {
+      refs.cameraCaptureSummary.textContent = "No camera capture";
+    }
+    if (refs.cameraCaptureDetail) {
+      refs.cameraCaptureDetail.textContent = "Camera capture is available from the Motion List.";
+    }
     populateBoneControls();
     return;
   }
@@ -1203,6 +1765,9 @@ function renderDetails() {
   refs.detailTags.value = motion.tags.join(", ");
   refs.detailPriority.value = String(motion.priority);
   refs.detailLoop.value = String(motion.loop);
+  if (refs.detailSharedAsset) {
+    refs.detailSharedAsset.checked = Boolean(motion.sharedAsset);
+  }
   refs.overlayId.textContent = motion.id;
   refs.overlayAlias.textContent = motion.alias || "(none)";
   refs.playingLabel.textContent = state.isPlaying
@@ -1239,6 +1804,22 @@ function renderDetails() {
     ? `${motion.displayName} / ${motion.id} · fallback data`
     : `${motion.displayName} / ${motion.id}`;
   refs.saveStatus.textContent = state.saveStatus;
+  if (refs.cameraCaptureSummary) {
+    refs.cameraCaptureSummary.textContent = motion.createdViaCamera
+      ? "Captured motion"
+      : "Standard motion";
+  }
+  if (refs.cameraCaptureDetail) {
+    const poseCount = Array.isArray(motion.cameraCapture?.poseLandmarks)
+      ? motion.cameraCapture.poseLandmarks.length
+      : 0;
+    const worldCount = Array.isArray(motion.cameraCapture?.poseWorldLandmarks)
+      ? motion.cameraCapture.poseWorldLandmarks.length
+      : 0;
+    refs.cameraCaptureDetail.textContent = motion.cameraCapture
+      ? `Captured at ${motion.cameraCapture.capturedAt || "unknown time"} · pose landmarks ${poseCount} · world landmarks ${worldCount}`
+      : "No camera capture data stored on this motion yet.";
+  }
   populateBoneControls();
 }
 
@@ -1260,6 +1841,7 @@ function render() {
   renderMotionList();
   renderDetails();
   applyPreviewSplitWidth(state.previewSplitWidth);
+  updateCameraCaptureVisibility();
   updateBonePreviewVisibility();
 }
 
@@ -1297,6 +1879,47 @@ function updateBonePreviewVisibility() {
   divider?.classList.toggle("is-hidden", !state.showBonePreview);
   toggle.classList.toggle("active", state.showBonePreview);
   toggle.textContent = state.showBonePreview ? "Bone Preview On" : "Bone Preview Off";
+}
+
+function updateCameraCaptureVisibility() {
+  const panel = refs.cameraCapturePanel;
+  const toggle = refs.cameraCaptureToggleButton;
+
+  if (!panel || !toggle) {
+    return;
+  }
+
+  panel.classList.toggle("is-collapsed", !state.cameraCaptureOpen);
+  toggle.classList.toggle("active", state.cameraCaptureOpen);
+  toggle.textContent = state.cameraCaptureOpen ? "Camera Capture · Open" : "Camera Capture · Closed";
+
+  if (refs.cameraCaptureNameInput && document.activeElement !== refs.cameraCaptureNameInput) {
+    refs.cameraCaptureNameInput.value = state.cameraCaptureName || "";
+  }
+
+  if (refs.cameraCaptureState) {
+    refs.cameraCaptureState.textContent = state.cameraCaptureActive
+      ? "Tracking"
+      : state.cameraCaptureOpen
+        ? "Ready"
+        : "Closed";
+  }
+
+  if (refs.cameraCaptureNote) {
+    refs.cameraCaptureNote.textContent = state.cameraCaptureError
+      ? `${state.cameraCaptureStatus} · ${state.cameraCaptureError}`
+      : state.cameraCaptureOpen || state.cameraCaptureActive
+        ? state.cameraCaptureStatus
+        : state.cameraCaptureHint || state.cameraCaptureStatus;
+  }
+
+  if (refs.cameraCaptureOverlayBadge) {
+    refs.cameraCaptureOverlayBadge.textContent = cameraCaptureLatestResult?.poseLandmarks?.[0]?.length
+      ? `Tracked ${cameraCaptureLatestResult.poseLandmarks[0].length} landmarks`
+      : state.cameraCaptureActive
+        ? "Tracking..."
+        : "Camera idle";
+  }
 }
 
 function renderSceneCameraButtons() {
@@ -2944,6 +3567,20 @@ async function init() {
   refs.detailTags = document.getElementById("detailTags");
   refs.detailPriority = document.getElementById("detailPriority");
   refs.detailLoop = document.getElementById("detailLoop");
+  refs.detailSharedAsset = document.getElementById("detailSharedAsset");
+  refs.detailSaveButton = document.getElementById("detailSaveButton");
+  refs.cameraCaptureSummary = document.getElementById("cameraCaptureSummary");
+  refs.cameraCaptureDetail = document.getElementById("cameraCaptureDetail");
+  refs.cameraCapturePanel = document.getElementById("cameraCapturePanel");
+  refs.cameraCaptureToggleButton = document.getElementById("cameraCaptureToggleButton");
+  refs.cameraCaptureNameInput = document.getElementById("cameraCaptureNameInput");
+  refs.cameraCaptureVideo = document.getElementById("cameraCaptureVideo");
+  refs.cameraCaptureOverlay = document.getElementById("cameraCaptureOverlay");
+  refs.cameraCaptureOverlayBadge = document.getElementById("cameraCaptureOverlayBadge");
+  refs.cameraCaptureNote = document.getElementById("cameraCaptureNote");
+  refs.cameraCaptureStartButton = document.getElementById("cameraCaptureStartButton");
+  refs.cameraCaptureStopButton = document.getElementById("cameraCaptureStopButton");
+  refs.cameraCaptureCreateButton = document.getElementById("cameraCaptureCreateButton");
   refs.vrmaRuntimeSummary = document.getElementById("vrmaRuntimeSummary");
   refs.boneMapHips = document.getElementById("boneMapHips");
   refs.boneMapSpine = document.getElementById("boneMapSpine");
@@ -2982,6 +3619,7 @@ async function init() {
   refs.exportDatasetButton = document.getElementById("exportDatasetButton");
   refs.importDatasetButton = document.getElementById("importDatasetButton");
   refs.clearMotionSelectionButton = document.getElementById("clearMotionSelectionButton");
+  refs.createMotionFromCameraButton = document.getElementById("createMotionFromCameraButton");
   refs.datasetFileInput = document.getElementById("datasetFileInput");
   refs.loadVrmButton = document.getElementById("loadVrmButton");
   refs.previewAutoRotateButton = document.getElementById("previewAutoRotateButton");
@@ -3058,6 +3696,51 @@ async function init() {
     state.playbackProgress = 0;
     render();
     renderPreviewFrame();
+  });
+
+  refs.createMotionFromCameraButton?.addEventListener("click", () => {
+    const sourceMotion = getSelectedMotion() ?? getDefaultMotion();
+    if (!sourceMotion) {
+      return;
+    }
+
+    const nextName = window.prompt("Camera motion name", sourceMotion.displayName || sourceMotion.alias || sourceMotion.id);
+    if (!nextName || !nextName.trim()) {
+      return;
+    }
+
+    state.cameraCaptureName = nextName.trim();
+    state.cameraCaptureOpen = true;
+    render();
+    void startCameraCaptureSession();
+  });
+
+  refs.cameraCaptureToggleButton?.addEventListener("click", () => {
+    state.cameraCaptureOpen = !state.cameraCaptureOpen;
+    render();
+    if (state.cameraCaptureOpen && !state.cameraCaptureActive) {
+      void startCameraCaptureSession();
+    } else if (!state.cameraCaptureOpen) {
+      stopCameraCaptureSession();
+    }
+  });
+
+  refs.cameraCaptureNameInput?.addEventListener("input", () => {
+    state.cameraCaptureName = refs.cameraCaptureNameInput.value;
+  });
+
+  refs.cameraCaptureStartButton?.addEventListener("click", () => {
+    state.cameraCaptureOpen = true;
+    render();
+    void startCameraCaptureSession();
+  });
+
+  refs.cameraCaptureStopButton?.addEventListener("click", () => {
+    stopCameraCaptureSession();
+  });
+
+  refs.cameraCaptureCreateButton?.addEventListener("click", () => {
+    void captureCameraMotion();
   });
 
   for (const button of refs.sceneCameraButtons) {
@@ -3373,6 +4056,19 @@ async function init() {
   });
   bindDetailInput(refs.detailLoop, (motion, value) => {
     motion.loop = value === "true" || value === "1" || value === "yes";
+  });
+
+  refs.detailSharedAsset?.addEventListener("change", () => {
+    const motion = getSelectedMotion();
+    if (!motion || !refs.detailSharedAsset) {
+      return;
+    }
+    motion.sharedAsset = refs.detailSharedAsset.checked;
+    persistState("Saved locally");
+  });
+
+  refs.detailSaveButton?.addEventListener("click", () => {
+    persistState("Shared data saved");
   });
 
   render();

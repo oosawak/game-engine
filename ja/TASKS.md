@@ -238,7 +238,29 @@
 - [ ] VRM Editor の右ペインに共通の `Inspector` 規約を反映する
 - [ ] `Scene View` と `Bone Preview` のレイアウトを拡張時も崩れないように保つ
 - [ ] 外部生成ツールからのアニメーション投入フローを定義する
+
+## Phase 20: Camera Pose Capture Integration
+
+- [ ] Motion List に `Create from Camera` ボタンを追加する
+- [ ] カメラ起動からモーション作成までの専用ワークフローを定義する
+- [ ] MediaPipe Pose の 33 ランドマークを取得できるようにする
+- [ ] `pose_world_landmarks` を VRM のボーンへ変換する
+- [ ] 取得ランドマークを 3D プレビュー上で可視化する
+- [ ] Hands と Face を必要に応じて同一ワークフローへ拡張する
+- [ ] `mediapipe-vrm-pose` の `cameraPos` と `VRMMotion` の分担を参考にする
+- [ ] `PoseScanner` 相当の入力層をエディタ内に統合する
+- [ ] カメラから作成したモーションを共通アセットとして保存できるようにする
+- [ ] 作成モーションを `Save Common Data` と `Download` の両方から扱えるようにする
+- [ ] カメラ補正・ランドマーク補正・スムージングの設定 UI を追加する
+- [ ] カメラキャプチャ結果の単体確認ページを `docs` に用意する
+- [ ] カメラ入力を無効にした場合でも VRM Editor が動作するようにする
 - [ ] Player / Object に対して外部生成アニメーションを割り当てる UI と保存仕様を定義する
+
+### Phase 20.1: First implementation slice
+
+- [ ] `Motion List` の前に `Create from Camera` ボタンを追加する
+- [ ] カメラプレビューで `Pose` ランドマークを表示し、取得状態を確認できるようにする
+- [ ] 取得した `pose_world_landmarks` を既存の VRM ボーンに 1 対 1 で反映し、共通アセットとして保存できるようにする
 
 ## Phase 19.1: VRM Pose Reference Integration
 
