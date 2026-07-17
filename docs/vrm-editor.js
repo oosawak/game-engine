@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { BVHLoader } from "three/addons/loaders/BVHLoader.js";
-import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
+import { VRMLoaderPlugin } from "@pixiv/three-vrm";
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from "@pixiv/three-vrm-animation";
 
 const DEFAULT_MOTIONS = [];
@@ -26,6 +25,7 @@ const state = {
   tag: "",
   playing: "Loading...",
   isPlaying: false,
+  isPaused: false,
   playbackMotionId: "",
   playbackTime: 0,
   playbackProgress: 0,
@@ -41,14 +41,12 @@ const state = {
   previewOffsetY: 0,
   previewDragging: false,
   bonePreviewZoom: 1,
-  showVrmTools: true,
-  vrmHandTarget: "both",
-  vrmHandPreset: "open",
+  previewSplitWidth: 360,
   loadedVrmName: "",
   loadedVrmUrl: "",
   loadedVrmToken: 0,
-  datasetId: "dataset1",
-  datasetLabel: "Dataset 1",
+  datasetId: "dataset2",
+  datasetLabel: "Dataset 2",
   boneMap: {
     hips: "",
     spine: "",
@@ -96,8 +94,6 @@ let vrmPreviewLoader = null;
 let vrmaMotionLoader = null;
 let vrmPreviewBoneIndex = new Map();
 let vrmPreviewRestPose = new Map();
-let motionRuntimeLoader = null;
-let bvhMotionRuntimeCache = new Map();
 let vrmaMotionRuntimeCache = new Map();
 let bonePreviewCanvas = null;
 let bonePreviewScene = null;
@@ -108,21 +104,23 @@ let bonePreviewLine = null;
 let bonePreviewDots = [];
 let bonePreviewNodeToDot = new Map();
 let previewDragState = null;
+let previewSplitDragState = null;
 const STORAGE_KEY = "game-engine.vrm-editor.v3";
 const DATASET_REGISTRY_KEY = "game-engine.vrm-editor.datasets.v1";
 const DATASET_SAVE_PREFIX = "game-engine.vrm-editor.dataset.v1.";
 const STORAGE_SCHEMA_VERSION = 3;
 const LEGACY_STORAGE_KEYS = ["game-engine.vrm-editor.v1", "game-engine.vrm-editor.v2"];
 const DATASET_SOURCES = [
-  { id: "dataset1", label: "Dataset 1", source: "./datasets/dataset1.json" },
   { id: "dataset2", label: "Dataset 2", source: "./datasets/dataset2.json" },
   { id: "dataset3", label: "Dataset 3", source: "./datasets/dataset3.json" },
   { id: "dataset4", label: "Dataset 4", source: "./datasets/dataset4.json" },
+  { id: "dataset5", label: "Dataset 5", source: "./datasets/dataset5.json" },
 ];
 const STANDARD_VRM_SOURCE = "./assets/vrm/standard/standard.vrm";
 const STANDARD_VRM_LABEL = "Standard VRM";
-const VRM_HAND_TARGETS = ["both", "left", "right"];
-const VRM_HAND_PRESETS = ["open", "close", "relax", "reset"];
+const REST_POSE_ID = "__rest_pose__";
+const REST_POSE_LABEL = "T-Pose";
+const MOTION_PREVIEW_SAMPLE_TIME = 0.0;
 const REQUIRED_BONE_SLOTS = ["leftShoulder", "rightShoulder", "leftFoot", "rightFoot"];
 const BONE_ALIAS_SLOTS = {
   hips: ["hips", "pelvis", "root", "body"],
@@ -130,8 +128,8 @@ const BONE_ALIAS_SLOTS = {
   chest: ["chest", "upperchest", "upper_body"],
   neck: ["neck"],
   head: ["head", "face"],
-  leftShoulder: ["leftshoulder", "shoulderl", "claviclel", "leftclavicle", "lshoulder"],
-  rightShoulder: ["rightshoulder", "shoulderr", "clavicler", "rightclavicle", "rshoulder"],
+  leftShoulder: ["leftshoulder", "shoulderl", "claviclel", "leftclavicle", "lshoulder", "jbiplshoulder"],
+  rightShoulder: ["rightshoulder", "shoulderr", "clavicler", "rightclavicle", "rshoulder", "jbiprshoulder"],
   leftArm: ["leftarm", "left_arm", "arm_l", "l_arm", "shoulderl", "upperarm_l", "leftupperarm"],
   rightArm: ["rightarm", "right_arm", "arm_r", "r_arm", "shoulderr", "upperarm_r", "rightupperarm"],
   leftForeArm: ["leftforearm", "left_forearm", "forearm_l", "l_forearm", "lowerarm_l"],
@@ -142,25 +140,11 @@ const BONE_ALIAS_SLOTS = {
   rightUpLeg: ["rightupleg", "right_up_leg", "upleg_r", "upperleg_r", "rightthigh"],
   leftHand: ["lefthand", "left_hand", "hand_l", "l_hand", "leftwrist", "wrist_l"],
   rightHand: ["righthand", "right_hand", "hand_r", "r_hand", "rightwrist", "wrist_r"],
-  leftFoot: ["leftfoot", "left_foot", "foot_l", "footl", "l_foot", "leftankle", "ankle_l", "lefttoe", "lefttoebase"],
-  rightFoot: ["rightfoot", "right_foot", "foot_r", "footr", "r_foot", "rightankle", "ankle_r", "righttoe", "righttoebase"],
+  leftFoot: ["leftfoot", "left_foot", "foot_l", "footl", "l_foot", "leftankle", "ankle_l", "lefttoe", "lefttoebase", "jbiplfoot", "jbipltobase"],
+  rightFoot: ["rightfoot", "right_foot", "foot_r", "footr", "r_foot", "rightankle", "ankle_r", "righttoe", "righttoebase", "jbiprfoot", "jbiprtobase"],
 };
-const BVH_AXIS_CORRECTION = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0, "XYZ"));
-const FOOT_AXIS_CORRECTION = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0, "XYZ"));
-
 function getDatasetSourceEntry(datasetId) {
   return DATASET_SOURCES.find((entry) => entry.id === datasetId) ?? DATASET_SOURCES[0];
-}
-
-function ensureVrmLoaderPlugins(loader) {
-  if (!loader || loader._vrmPluginsRegistered) {
-    return loader;
-  }
-
-  loader.register((parser) => new VRMLoaderPlugin(parser));
-  loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
-  loader._vrmPluginsRegistered = true;
-  return loader;
 }
 
 function getDatasetSaveKey(datasetId) {
@@ -186,15 +170,17 @@ function writeJsonStorage(key, value) {
 function loadDatasetRegistry() {
   const snapshot = readJsonStorage(DATASET_REGISTRY_KEY);
   if (!snapshot || typeof snapshot !== "object") {
-    return null;
+    return DATASET_SOURCES[0]?.id ?? "";
   }
   const datasetId = typeof snapshot.datasetId === "string" && snapshot.datasetId.trim()
     ? snapshot.datasetId.trim()
     : "";
   if (!datasetId) {
-    return null;
+    return DATASET_SOURCES[0]?.id ?? "";
   }
-  return datasetId;
+  return DATASET_SOURCES.some((entry) => entry.id === datasetId)
+    ? datasetId
+    : DATASET_SOURCES[0]?.id ?? "";
 }
 
 function saveDatasetRegistry(datasetId) {
@@ -504,58 +490,12 @@ function cloneFingerAdjustments(value) {
     .filter((entry) => entry.hand.trim().length > 0 || entry.pose.trim().length > 0);
 }
 
-function buildFingerAdjustmentsForHand(target, pose) {
-  const hand = normalizeBoneKey(target);
-  const normalizedPose = normalizeBoneKey(pose);
-
-  if (normalizedPose === "reset") {
-    return [];
-  }
-
-  const entries = [];
-  if (hand === "both" || hand === "left") {
-    entries.push({ hand: "leftHand", pose: normalizedPose, weight: 1 });
-  }
-  if (hand === "both" || hand === "right") {
-    entries.push({ hand: "rightHand", pose: normalizedPose, weight: 1 });
-  }
-  return entries;
-}
-
 function isVrmDatasetMotion(motion) {
   return Boolean(motion?.source && isVrmaSource(motion.source));
 }
 
 function datasetHasVrmMotions() {
   return motions.some((motion) => isVrmDatasetMotion(motion));
-}
-
-function getHandPoseLabel(pose) {
-  const normalized = normalizeBoneKey(pose);
-  if (normalized === "close") {
-    return "Close";
-  }
-  if (normalized === "relax") {
-    return "Relax";
-  }
-  if (normalized === "reset") {
-    return "Reset";
-  }
-  return "Open";
-}
-
-function getHandPoseBias(pose) {
-  const normalized = normalizeBoneKey(pose);
-  if (normalized.includes("close") || normalized.includes("grip") || normalized.includes("fist")) {
-    return -0.28;
-  }
-  if (normalized.includes("relax")) {
-    return 0.04;
-  }
-  if (normalized.includes("open") || normalized.includes("spread")) {
-    return 0.16;
-  }
-  return 0.08;
 }
 
 function findBoneNodesByTerms(terms) {
@@ -572,6 +512,7 @@ function findBoneNodesByTerms(terms) {
 
 function collectFingerNodes(handSide) {
   const side = normalizeBoneKey(handSide).includes("left") ? "left" : "right";
+  const jBipSide = side === "left" ? "jbipl" : "jbipr";
   const prefixTerms = side === "left"
     ? ["left", "l", "lhand", "lwrist"]
     : ["right", "r", "rhand", "rwrist"];
@@ -587,6 +528,7 @@ function collectFingerNodes(handSide) {
   for (const fingerTerms of fingerGroups) {
     const terms = [
       ...prefixTerms.flatMap((prefix) => fingerTerms.map((finger) => `${prefix}${finger}`)),
+      ...fingerTerms.map((finger) => `${jBipSide}${finger}`),
       ...fingerTerms.map((finger) => `${side}${finger}`),
       ...fingerTerms.map((finger) => `${side}_${finger}`),
       ...fingerTerms.map((finger) => `${side} ${finger}`),
@@ -598,27 +540,6 @@ function collectFingerNodes(handSide) {
     }
   }
 
-  return nodes;
-}
-
-function getFingerNodesFromParts(handSide) {
-  if (!vrmPreviewModelRoot) {
-    return [];
-  }
-
-  const normalizedSide = normalizeBoneKey(handSide).includes("left") ? "left" : "right";
-  const cacheKey = normalizedSide === "left" ? "leftFingerNodes" : "rightFingerNodes";
-  const cached = vrmPreviewModelParts?.[cacheKey];
-  if (Array.isArray(cached) && cached.length) {
-    return cached;
-  }
-
-  const nodes = collectFingerNodes(normalizedSide);
-  if (!vrmPreviewModelParts) {
-    return nodes;
-  }
-
-  vrmPreviewModelParts[cacheKey] = nodes;
   return nodes;
 }
 
@@ -685,7 +606,9 @@ function parseDurationSeconds(duration) {
 }
 
 function getCurrentMotion() {
-  return motions.find((motion) => motion.id === (state.playbackMotionId || state.selectedId)) ?? getSelectedMotion();
+  return motions.find((motion) => motion.id === (state.playbackMotionId || state.selectedId))
+    ?? getSelectedMotion()
+    ?? null;
 }
 
 function syncPlaybackToSelection(resetTime = false) {
@@ -701,12 +624,25 @@ function syncPlaybackToSelection(resetTime = false) {
   }
 }
 
-function startMotionPlayback(motion = getSelectedMotion()) {
+function getDefaultMotion() {
+  return motions[0] ?? null;
+}
+
+function formatSeconds(value) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds)) {
+    return "0.00s";
+  }
+  return `${seconds.toFixed(2)}s`;
+}
+
+function startMotionPlayback(motion = getSelectedMotion() ?? getDefaultMotion()) {
   if (!motion) {
     return;
   }
 
   state.isPlaying = true;
+  state.isPaused = false;
   state.playbackMotionId = motion.id;
   state.playbackTime = 0;
   state.playbackProgress = 0;
@@ -715,12 +651,128 @@ function startMotionPlayback(motion = getSelectedMotion()) {
   renderPreviewFrame();
 }
 
-function stopMotionPlayback() {
+function showMotionPose(motion = getSelectedMotion() ?? getDefaultMotion()) {
+  if (!motion) {
+    return;
+  }
+
+  const duration = parseDurationSeconds(motion.duration);
+  state.selectedId = motion.id;
+  state.playbackMotionId = motion.id;
   state.isPlaying = false;
-  state.playing = "Stopped";
+  state.isPaused = false;
+  state.playbackTime = Math.min(duration, MOTION_PREVIEW_SAMPLE_TIME);
+  state.playbackProgress = duration > 0 ? Math.min(1, state.playbackTime / duration) : 0;
+  state.playing = motion.displayName;
+  void ensureVrmaMotionRuntime(motion);
+  render();
+  renderPreviewFrame();
+}
+
+function selectRestPose() {
+  resetPreviewPose();
+  state.selectedId = REST_POSE_ID;
+  state.playbackMotionId = "";
+  state.isPlaying = false;
+  state.isPaused = false;
   state.playbackTime = 0;
   state.playbackProgress = 0;
+  state.playing = REST_POSE_LABEL;
   render();
+  renderPreviewFrame();
+}
+
+function resetPreviewPose() {
+  for (const entry of vrmPreviewRestPose.values()) {
+    if (!entry?.node) {
+      continue;
+    }
+    entry.node.rotation.x = entry.rotation.x;
+    entry.node.rotation.y = entry.rotation.y;
+    entry.node.rotation.z = entry.rotation.z;
+    if (entry.quaternion) {
+      entry.node.quaternion.copy(entry.quaternion);
+    }
+  }
+
+  for (const runtime of vrmaMotionRuntimeCache.values()) {
+    runtime.action?.stop?.();
+    runtime.action = null;
+    runtime.mixer?.stopAllAction?.();
+  }
+}
+
+function getSeekStatusText(motion = getCurrentMotion()) {
+  if (!motion) {
+    return "Seek: 0% / Stop: 0.00s";
+  }
+
+  const duration = parseDurationSeconds(motion.duration);
+  const seekPercent = Math.max(0, Math.min(100, Math.round((state.playbackProgress || 0) * 100)));
+  const currentTime = Math.max(0, Math.min(duration, state.playbackTime || 0));
+  const stopTime = state.isPlaying || state.isPaused
+    ? currentTime
+    : Math.min(duration, MOTION_PREVIEW_SAMPLE_TIME);
+
+  return `Seek: ${seekPercent}% / Time: ${formatSeconds(currentTime)} / Stop: ${formatSeconds(stopTime)}`;
+}
+
+function updateSeekStatus(motion = getCurrentMotion()) {
+  if (refs.seekStatus) {
+    refs.seekStatus.textContent = getSeekStatusText(motion);
+  }
+}
+
+function pauseMotionPlayback() {
+  if (!state.playbackMotionId) {
+    return;
+  }
+
+  state.isPlaying = false;
+  state.isPaused = true;
+  const motion = getCurrentMotion();
+  state.playing = motion ? `Paused: ${motion.displayName}` : "Paused";
+  render();
+  renderPreviewFrame();
+}
+
+function resumeMotionPlayback() {
+  if (!state.playbackMotionId) {
+    const motion = getSelectedMotion() ?? getDefaultMotion();
+    if (!motion) {
+      return;
+    }
+    startMotionPlayback(motion);
+    return;
+  }
+
+  state.isPlaying = true;
+  state.isPaused = false;
+  const motion = getCurrentMotion();
+  if (motion) {
+    state.playing = motion.displayName;
+  }
+  render();
+  renderPreviewFrame();
+}
+
+function stopMotionPlayback() {
+  const motion = getCurrentMotion() ?? getSelectedMotion() ?? getDefaultMotion();
+  if (motion) {
+    const duration = parseDurationSeconds(motion.duration);
+    state.playbackMotionId = motion.id;
+    state.playbackTime = Math.min(duration, MOTION_PREVIEW_SAMPLE_TIME);
+    state.playbackProgress = duration > 0 ? Math.min(1, state.playbackTime / duration) : 0;
+    state.playing = `Stopped: ${motion.displayName}`;
+  } else {
+    state.playbackTime = 0;
+    state.playbackProgress = 0;
+    state.playing = "Stopped";
+  }
+  state.isPlaying = false;
+  state.isPaused = false;
+  render();
+  renderPreviewFrame();
 }
 
 function updatePlaybackProgress(motion, deltaSeconds) {
@@ -751,12 +803,12 @@ function applyMotionData(rawData) {
   motions = loadedMotions.length ? loadedMotions : cloneMotionList(DEFAULT_MOTIONS);
   tags = uniqueTags(motions, Array.isArray(rawData?.tags) ? rawData.tags : DEFAULT_TAGS);
 
-  if (!motions.some((motion) => motion.id === state.selectedId)) {
-    state.selectedId = motions[0]?.id ?? "";
+  if (state.selectedId && !motions.some((motion) => motion.id === state.selectedId)) {
+    state.selectedId = "";
   }
 
   if (!state.playbackMotionId || !motions.some((motion) => motion.id === state.playbackMotionId)) {
-    state.playbackMotionId = state.selectedId;
+    state.playbackMotionId = state.selectedId || motions[0]?.id || "";
   }
 
   if (!state.playing || state.playing === "Loading...") {
@@ -794,9 +846,6 @@ function serializeState() {
       tag: state.tag,
       playing: state.playing,
       sceneCameraPreset: state.sceneCameraPreset,
-      showVrmTools: state.showVrmTools,
-      vrmHandTarget: state.vrmHandTarget,
-      vrmHandPreset: state.vrmHandPreset,
     },
   };
 }
@@ -842,9 +891,6 @@ function normalizeImportedDataset(payload) {
       tag: typeof ui.tag === "string" ? ui.tag : state.tag,
       playing: typeof ui.playing === "string" ? ui.playing : state.playing,
       sceneCameraPreset: typeof ui.sceneCameraPreset === "string" ? ui.sceneCameraPreset : state.sceneCameraPreset,
-      showVrmTools: typeof ui.showVrmTools === "boolean" ? ui.showVrmTools : state.showVrmTools,
-      vrmHandTarget: typeof ui.vrmHandTarget === "string" ? ui.vrmHandTarget : state.vrmHandTarget,
-      vrmHandPreset: typeof ui.vrmHandPreset === "string" ? ui.vrmHandPreset : state.vrmHandPreset,
     },
   };
 }
@@ -926,13 +972,6 @@ function hydrateState(snapshot) {
   state.tag = typeof ui.tag === "string" ? ui.tag : state.tag;
   state.playing = typeof ui.playing === "string" ? ui.playing : state.playing;
   state.sceneCameraPreset = typeof ui.sceneCameraPreset === "string" ? ui.sceneCameraPreset : state.sceneCameraPreset;
-  state.showVrmTools = typeof ui.showVrmTools === "boolean" ? ui.showVrmTools : state.showVrmTools;
-  state.vrmHandTarget = typeof ui.vrmHandTarget === "string" && VRM_HAND_TARGETS.includes(ui.vrmHandTarget)
-    ? ui.vrmHandTarget
-    : state.vrmHandTarget;
-  state.vrmHandPreset = typeof ui.vrmHandPreset === "string" && VRM_HAND_PRESETS.includes(ui.vrmHandPreset)
-    ? ui.vrmHandPreset
-    : state.vrmHandPreset;
 
   if (!motions.some((motion) => motion.id === state.selectedId)) {
     state.selectedId = motions[0]?.id ?? "";
@@ -955,7 +994,7 @@ function findMotionFromQuery() {
 }
 
 function getSelectedMotion() {
-  return motions.find((motion) => motion.id === state.selectedId) ?? motions[0] ?? null;
+  return motions.find((motion) => motion.id === state.selectedId) ?? null;
 }
 
 function matchesMotion(motion) {
@@ -1037,6 +1076,26 @@ function renderMotionList() {
     refs.motionList.appendChild(errorCard);
   }
 
+  const restPoseCard = document.createElement("article");
+  restPoseCard.className = `motion-card${state.selectedId === REST_POSE_ID ? " active" : ""}`;
+  restPoseCard.tabIndex = 0;
+  restPoseCard.innerHTML = `
+    <div class="motion-title"><span>${REST_POSE_LABEL}</span><span>fixed</span></div>
+    <div class="motion-subtitle">固定の休止姿勢です。データセットには保存されません。</div>
+    <div class="tag-row">
+      <span class="tag">rest</span>
+      <span class="tag">pose</span>
+      <span class="tag">fixed</span>
+    </div>
+  `;
+  restPoseCard.addEventListener("click", () => {
+    selectRestPose();
+  });
+  restPoseCard.addEventListener("dblclick", () => {
+    selectRestPose();
+  });
+  refs.motionList.appendChild(restPoseCard);
+
   if (!filtered.length) {
     const empty = document.createElement("div");
     empty.className = "motion-card";
@@ -1049,7 +1108,7 @@ function renderMotionList() {
     const card = document.createElement("article");
     card.className = `motion-card${motion.id === state.selectedId ? " active" : ""}`;
     card.tabIndex = 0;
-    const sourceKind = isVrmDatasetMotion(motion) ? "VRMA" : isBvhSource(motion.source) ? "BVH" : "Motion";
+    const sourceKind = isVrmDatasetMotion(motion) ? "VRMA" : "Motion";
     card.innerHTML = `
       <div class="motion-title"><span>${motion.displayName}</span><span>${motion.id}</span></div>
       <div class="motion-subtitle">${motion.alias || "No alias"}${motion.content || motion.style ? ` · ${[motion.content, motion.style].filter(Boolean).join(" / ")}` : ""} · ${sourceKind} · ${motion.source}</div>
@@ -1058,11 +1117,7 @@ function renderMotionList() {
       </div>
     `;
     card.addEventListener("click", () => {
-      state.selectedId = motion.id;
-      if (state.isPlaying) {
-        syncPlaybackToSelection(true);
-      }
-      render();
+      showMotionPose(motion);
     });
     card.addEventListener("dblclick", () => {
       state.selectedId = motion.id;
@@ -1073,46 +1128,43 @@ function renderMotionList() {
   }
 }
 
-function renderVrmToolsPanel() {
-  const section = refs.vrmToolsSection;
-  if (!section) {
-    return;
-  }
-
-  const visible = datasetHasVrmMotions();
-  section.hidden = !visible;
-  if (!visible) {
-    return;
-  }
-
-  section.classList.toggle("is-collapsed", !state.showVrmTools);
-  if (refs.vrmToolsState) {
-    const targetLabel = getHandPoseLabel(state.vrmHandPreset);
-    refs.vrmToolsState.textContent = state.showVrmTools
-      ? `${targetLabel} · ${state.vrmHandTarget}`
-      : "Collapsed";
-  }
-
-  if (refs.vrmHandTarget && refs.vrmHandTarget.value !== state.vrmHandTarget) {
-    refs.vrmHandTarget.value = state.vrmHandTarget;
-  }
-  if (refs.vrmHandPreset && refs.vrmHandPreset.value !== state.vrmHandPreset) {
-    refs.vrmHandPreset.value = state.vrmHandPreset;
-  }
-  if (refs.vrmToolsNote) {
-    const motion = getSelectedMotion();
-    refs.vrmToolsNote.textContent = motion && isVrmDatasetMotion(motion)
-      ? `${motion.displayName} に手ポーズを適用します。VRMA モーションの補助調整として使えます。`
-      : "VRMA を含むデータセットでのみ表示されます。";
-  }
-  if (refs.applyVrmHandPoseButton) {
-    refs.applyVrmHandPoseButton.disabled = !getSelectedMotion();
-  }
-}
-
 function renderDetails() {
   const motion = getSelectedMotion();
   const playbackMotion = getCurrentMotion();
+
+  if (state.selectedId === REST_POSE_ID) {
+    refs.detailId.textContent = REST_POSE_LABEL;
+    refs.detailAlias.value = "Rest Pose";
+    refs.detailDisplayName.value = REST_POSE_LABEL;
+    refs.detailSource.value = "fixed";
+    refs.detailTags.value = "rest, pose, fixed";
+    refs.detailPriority.value = "0";
+    refs.detailLoop.value = "false";
+    refs.overlayId.textContent = REST_POSE_LABEL;
+    refs.overlayAlias.textContent = "fixed";
+    refs.playingLabel.textContent = `Playing: ${REST_POSE_LABEL}`;
+    refs.timelineProgress.style.width = "0%";
+    refs.loadedVrmLabel.textContent = state.loadedVrmName ? `Loaded: ${state.loadedVrmName}` : "No VRM loaded.";
+    refs.footerSummary.textContent = "Fixed rest pose";
+    refs.saveStatus.textContent = state.saveStatus;
+    if (refs.playButton) {
+      refs.playButton.classList.remove("active");
+      refs.playButton.textContent = "Play";
+    }
+    if (refs.pauseButton) {
+      refs.pauseButton.classList.remove("active");
+      refs.pauseButton.disabled = true;
+    }
+    if (refs.stopButton) {
+      refs.stopButton.classList.add("active");
+    }
+    if (refs.loopButton) {
+      refs.loopButton.classList.remove("active");
+    }
+    populateBoneControls();
+    updateSeekStatus(null);
+    return;
+  }
 
   if (!motion) {
     refs.detailId.textContent = "-";
@@ -1144,10 +1196,16 @@ function renderDetails() {
   refs.overlayAlias.textContent = motion.alias || "(none)";
   refs.playingLabel.textContent = state.isPlaying
     ? `Playing: ${playbackMotion?.displayName ?? state.playing}`
-    : `Playing: ${state.playing}`;
+    : state.isPaused
+      ? `Paused: ${playbackMotion?.displayName ?? state.playing}`
+      : `Playing: ${state.playing}`;
   if (refs.playButton) {
     refs.playButton.classList.toggle("active", state.isPlaying);
-    refs.playButton.textContent = state.isPlaying ? "Playing" : "Play";
+    refs.playButton.textContent = state.isPaused ? "Resume" : (state.isPlaying ? "Playing" : "Play");
+  }
+  if (refs.pauseButton) {
+    refs.pauseButton.classList.toggle("active", state.isPaused);
+    refs.pauseButton.disabled = !playbackMotion || state.isPaused === false && !state.isPlaying;
   }
   if (refs.stopButton) {
     refs.stopButton.classList.toggle("active", !state.isPlaying);
@@ -1161,6 +1219,7 @@ function renderDetails() {
     refs.seekLabel.value = String(seekValue);
   }
   refs.timelineProgress.style.width = `${Math.max(8, Math.min(100, seekValue))}%`;
+  updateSeekStatus(motion);
   refs.loadedVrmLabel.textContent = state.loadedVrmName ? `Loaded: ${state.loadedVrmName}` : "No VRM loaded.";
   if (refs.vrmaRuntimeSummary) {
     refs.vrmaRuntimeSummary.textContent = getVrmaRuntimeSummary(motion);
@@ -1188,15 +1247,35 @@ function render() {
   renderSceneCameraButtons();
   renderTagFilters();
   renderMotionList();
-  renderVrmToolsPanel();
   renderDetails();
+  applyPreviewSplitWidth(state.previewSplitWidth);
   updateBonePreviewVisibility();
+}
+
+function applyPreviewSplitWidth(width = state.previewSplitWidth) {
+  const nextWidth = Math.max(220, Math.min(480, Math.round(Number(width) || 360)));
+  state.previewSplitWidth = nextWidth;
+  document.documentElement.style.setProperty("--preview-split-width", `${nextWidth}px`);
+}
+
+function initializePreviewSplitWidth() {
+  const rect = refs.previewSplit?.getBoundingClientRect();
+  if (!rect || !Number.isFinite(rect.width) || rect.width <= 0) {
+    applyPreviewSplitWidth(state.previewSplitWidth);
+    return;
+  }
+
+  const usableWidth = Math.max(440, rect.width - 10);
+  const preferredWidth = Math.round(usableWidth * 0.4);
+  state.previewSplitWidth = Math.max(220, Math.min(480, preferredWidth));
+  applyPreviewSplitWidth(state.previewSplitWidth);
 }
 
 function updateBonePreviewVisibility() {
   const panel = refs.bonePreviewPanel;
   const toggle = refs.bonePreviewToggleButton;
   const split = refs.previewSplit;
+  const divider = refs.previewDivider;
 
   if (!panel || !toggle) {
     return;
@@ -1204,6 +1283,7 @@ function updateBonePreviewVisibility() {
 
   panel.classList.toggle("is-hidden", !state.showBonePreview);
   split?.classList.toggle("is-collapsed", !state.showBonePreview);
+  divider?.classList.toggle("is-hidden", !state.showBonePreview);
   toggle.classList.toggle("active", state.showBonePreview);
   toggle.textContent = state.showBonePreview ? "Bone Preview On" : "Bone Preview Off";
 }
@@ -1318,26 +1398,18 @@ function renderPreviewFrame() {
   updatePreviewContentOffset();
   const motion = getCurrentMotion();
   const progress = updatePlaybackProgress(motion, deltaSeconds);
-  if (motion && isBvhSource(motion.source)) {
-    const runtime = bvhMotionRuntimeCache.get(motion.source);
-    if (runtime?.ready) {
-      applyBvhMotionPose(runtime, motion);
-    } else {
-      void ensureMotionRuntime(motion);
-      applyMotionPose(motion, progress, state.playbackTime);
-    }
-  } else if (motion && isVrmaSource(motion.source)) {
+  if (motion && isVrmaSource(motion.source)) {
     const runtime = vrmaMotionRuntimeCache.get(motion.source);
-    if (runtime?.ready) {
+    if (runtime?.ready && vrmPreviewVrm) {
       applyVrmaMotionPose(runtime, motion, progress);
     } else {
       void ensureVrmaMotionRuntime(motion);
-      applyMotionPose(motion, progress, state.playbackTime);
     }
   } else {
     applyMotionPose(motion, progress, state.playbackTime);
   }
-  vrmPreviewVrm?.update?.(deltaSeconds);
+  vrmPreviewVrm?.update?.(state.isPlaying ? deltaSeconds : 0);
+  updateSeekStatus(motion);
   if (refs.vrmaRuntimeSummary) {
     refs.vrmaRuntimeSummary.textContent = getVrmaRuntimeSummary(motion);
   }
@@ -1685,6 +1757,7 @@ function clearPreviewModel() {
   vrmPreviewBoneOptions = [];
   vrmPreviewBoneIndex = new Map();
   vrmPreviewRestPose = new Map();
+  vrmPreviewVrm = null;
   updatePreviewContentVisibility();
 }
 
@@ -1722,7 +1795,6 @@ function applyMotionPose(motion, progress, elapsedSeconds) {
   const blend = THREE.MathUtils.clamp(cycle, 0, 1);
   const motionBones = Array.isArray(motion.boneRotations) ? motion.boneRotations : [];
   const expressionAdjustments = Array.isArray(motion.expressionAdjustments) ? motion.expressionAdjustments : [];
-  const fingerAdjustments = Array.isArray(motion.fingerAdjustments) ? motion.fingerAdjustments : [];
 
   for (const entry of vrmPreviewRestPose.values()) {
     if (!entry?.node) {
@@ -1753,9 +1825,6 @@ function applyMotionPose(motion, progress, elapsedSeconds) {
 
   const headNode = resolveMotionSlotNode("head");
   const chestNode = resolveMotionSlotNode("chest");
-  const leftArmNode = resolveMotionSlotNode("leftArm");
-  const rightArmNode = resolveMotionSlotNode("rightArm");
-
   for (const entry of expressionAdjustments) {
     const name = normalizeBoneKey(entry.name);
     const weight = normalizeWeight(entry.weight) * blend;
@@ -1790,29 +1859,6 @@ function applyMotionPose(motion, progress, elapsedSeconds) {
     }
   }
 
-  for (const entry of fingerAdjustments) {
-    const hand = normalizeBoneKey(entry.hand);
-    const pose = normalizeBoneKey(entry.pose);
-    const weight = normalizeWeight(entry.weight) * blend;
-    if (!weight) {
-      continue;
-    }
-
-    const handNode = hand.includes("left") ? resolveMotionSlotNode("leftHand") : resolveMotionSlotNode("rightHand");
-    const armNode = hand.includes("left") ? leftArmNode : rightArmNode;
-    if (handNode) {
-      const poseBias = getHandPoseBias(pose);
-      handNode.rotation.x += poseBias * weight;
-      handNode.rotation.y += pose.includes("wave") ? 0.25 * weight : pose.includes("relax") ? 0.03 * weight : 0;
-      handNode.rotation.z += hand.includes("left") ? -0.08 * weight : 0.08 * weight;
-    }
-    if (armNode) {
-      armNode.rotation.z += pose.includes("wave")
-        ? (hand.includes("left") ? 0.18 : -0.18) * weight
-        : 0;
-    }
-  }
-
   const selectedBone = state.selectedBoneKey
     ? vrmPreviewBoneOptions.find((entry) => entry.key === state.selectedBoneKey)?.node ?? null
     : null;
@@ -1826,150 +1872,35 @@ function applyMotionPose(motion, progress, elapsedSeconds) {
   }
 }
 
-function applyFingerAdjustments(motion, blend = 1) {
-  if (!motion) {
-    return;
-  }
-
-  const fingerAdjustments = Array.isArray(motion.fingerAdjustments) ? motion.fingerAdjustments : [];
-  const leftArmNode = resolveMotionSlotNode("leftArm");
-  const rightArmNode = resolveMotionSlotNode("rightArm");
-
-  for (const entry of fingerAdjustments) {
-    const hand = normalizeBoneKey(entry.hand);
-    const pose = normalizeBoneKey(entry.pose);
-    const weight = normalizeWeight(entry.weight) * blend;
-    if (!weight) {
-      continue;
-    }
-
-    const handNode = hand.includes("left") ? resolveMotionSlotNode("leftHand") : resolveMotionSlotNode("rightHand");
-    const armNode = hand.includes("left") ? leftArmNode : rightArmNode;
-    const fingerNodes = hand.includes("left")
-      ? getFingerNodesFromParts("left")
-      : getFingerNodesFromParts("right");
-    if (handNode) {
-      const poseBias = getHandPoseBias(pose);
-      handNode.rotation.x += poseBias * weight;
-      handNode.rotation.y += pose.includes("wave") ? 0.25 * weight : pose.includes("relax") ? 0.03 * weight : 0;
-      handNode.rotation.z += hand.includes("left") ? -0.08 * weight : 0.08 * weight;
-    }
-    if (armNode) {
-      armNode.rotation.z += pose.includes("wave")
-        ? (hand.includes("left") ? 0.18 : -0.18) * weight
-        : 0;
-    }
-
-    if (fingerNodes.length) {
-      const closed = pose.includes("close") || pose.includes("grip") || pose.includes("fist");
-      const spread = pose.includes("open") || pose.includes("spread");
-      const relax = pose.includes("relax");
-      for (const node of fingerNodes) {
-        const name = normalizeBoneKey(node.name || node.type || "");
-        const isThumb = name.includes("thumb");
-        const isIndex = name.includes("index");
-        const isMiddle = name.includes("middle");
-        const isRing = name.includes("ring");
-        const isLittle = name.includes("little") || name.includes("pinky");
-        const groupBias = isThumb ? 0.55 : isIndex ? 1.0 : isMiddle ? 0.95 : isRing ? 0.9 : isLittle ? 0.85 : 0.8;
-        const curl = closed ? -0.65 : spread ? 0.26 : relax ? -0.12 : 0.12;
-        const sideBias = hand.includes("left") ? -1 : 1;
-        node.rotation.x += curl * groupBias * weight;
-        node.rotation.y += (isThumb ? 0.12 : 0.03) * sideBias * weight;
-        node.rotation.z += (isThumb ? -0.06 : 0.02) * sideBias * weight;
-      }
-    }
-  }
-}
-
 function applyVrmaMotionPose(runtime, motion, progress) {
   if (!runtime?.ready || !runtime.clip || !runtime.mixer || !motion) {
     return false;
   }
 
-  const duration = runtime.clip.duration || parseDurationSeconds(motion.duration);
-  const time = motion.loop ? (state.playbackTime % duration) : Math.min(state.playbackTime, duration);
-  runtime.mixer.setTime(time);
-  applyFingerAdjustments(motion, progress);
-  return true;
-}
-
-function applyBvhMotionPose(runtime, motion) {
-  if (!runtime?.ready || !runtime.root || !motion) {
-    return false;
-  }
-
-  const duration = runtime.clip?.duration || parseDurationSeconds(motion.duration);
-  const time = duration > 0 ? state.playbackTime % duration : state.playbackTime;
-
-  if (runtime.mixer && typeof runtime.mixer.setTime === "function") {
-    runtime.mixer.setTime(time);
-  } else if (runtime.action) {
-    runtime.action.time = time;
-    runtime.mixer?.update?.(0);
-  }
-
-  const bvhTargets = {
-    hips: findSourceBone(runtime, "hips") ?? findSourceBone(runtime, "root"),
-    spine: findSourceBone(runtime, "spine") ?? findSourceBone(runtime, "spine1"),
-    chest: findSourceBone(runtime, "chest") ?? findSourceBone(runtime, "spine"),
-    neck: findSourceBone(runtime, "neck"),
-    head: findSourceBone(runtime, "head") ?? findSourceBone(runtime, "neck"),
-    leftShoulder: findSourceBone(runtime, "leftShoulder") ?? findSourceBone(runtime, "leftClavicle"),
-    rightShoulder: findSourceBone(runtime, "rightShoulder") ?? findSourceBone(runtime, "rightClavicle"),
-    leftArm: findSourceBone(runtime, "leftArm") ?? findSourceBone(runtime, "leftShoulder"),
-    rightArm: findSourceBone(runtime, "rightArm") ?? findSourceBone(runtime, "rightShoulder"),
-    leftForeArm: findSourceBone(runtime, "leftForeArm") ?? findSourceBone(runtime, "leftArm"),
-    rightForeArm: findSourceBone(runtime, "rightForeArm") ?? findSourceBone(runtime, "rightArm"),
-    leftUpLeg: findSourceBone(runtime, "leftUpLeg") ?? findSourceBone(runtime, "leftLeg"),
-    rightUpLeg: findSourceBone(runtime, "rightUpLeg") ?? findSourceBone(runtime, "rightLeg"),
-    leftLeg: findSourceBone(runtime, "leftLeg") ?? findSourceBone(runtime, "leftUpLeg"),
-    rightLeg: findSourceBone(runtime, "rightLeg") ?? findSourceBone(runtime, "rightUpLeg"),
-    leftHand: findSourceBone(runtime, "leftHand") ?? findSourceBone(runtime, "leftForeArm"),
-    rightHand: findSourceBone(runtime, "rightHand") ?? findSourceBone(runtime, "rightForeArm"),
-    leftFoot: findSourceBone(runtime, "leftFoot") ?? findSourceBone(runtime, "leftLeg"),
-    rightFoot: findSourceBone(runtime, "rightFoot") ?? findSourceBone(runtime, "rightLeg"),
-  };
-
-  const targetNodes = {
-    hips: resolveMotionSlotNode("hips") ?? vrmPreviewModelParts?.hips ?? null,
-    spine: resolveMotionSlotNode("spine") ?? vrmPreviewModelParts?.spine ?? null,
-    chest: resolveMotionSlotNode("chest") ?? vrmPreviewModelParts?.chest ?? null,
-    neck: resolveMotionSlotNode("neck") ?? vrmPreviewModelParts?.neck ?? null,
-    head: resolveMotionSlotNode("head") ?? vrmPreviewModelParts?.head ?? null,
-    leftShoulder: resolveMotionSlotNode("leftShoulder") ?? vrmPreviewModelParts?.leftShoulder ?? null,
-    rightShoulder: resolveMotionSlotNode("rightShoulder") ?? vrmPreviewModelParts?.rightShoulder ?? null,
-    leftArm: resolveMotionSlotNode("leftArm") ?? vrmPreviewModelParts?.leftArm ?? null,
-    rightArm: resolveMotionSlotNode("rightArm") ?? vrmPreviewModelParts?.rightArm ?? null,
-    leftForeArm: resolveMotionSlotNode("leftForeArm") ?? vrmPreviewModelParts?.leftForeArm ?? null,
-    rightForeArm: resolveMotionSlotNode("rightForeArm") ?? vrmPreviewModelParts?.rightForeArm ?? null,
-    leftUpLeg: resolveMotionSlotNode("leftUpLeg") ?? vrmPreviewModelParts?.leftUpLeg ?? null,
-    rightUpLeg: resolveMotionSlotNode("rightUpLeg") ?? vrmPreviewModelParts?.rightUpLeg ?? null,
-    leftLeg: resolveMotionSlotNode("leftLeg") ?? vrmPreviewModelParts?.leftLeg ?? null,
-    rightLeg: resolveMotionSlotNode("rightLeg") ?? vrmPreviewModelParts?.rightLeg ?? null,
-    leftHand: resolveMotionSlotNode("leftHand") ?? vrmPreviewModelParts?.leftHand ?? null,
-    rightHand: resolveMotionSlotNode("rightHand") ?? vrmPreviewModelParts?.rightHand ?? null,
-    leftFoot: resolveMotionSlotNode("leftFoot") ?? vrmPreviewModelParts?.leftFoot ?? null,
-    rightFoot: resolveMotionSlotNode("rightFoot") ?? vrmPreviewModelParts?.rightFoot ?? null,
-  };
-
-  for (const [slot, sourceNode] of Object.entries(bvhTargets)) {
-    const targetNode = targetNodes[slot];
-    if (!sourceNode || !targetNode) {
+  for (const entry of vrmPreviewRestPose.values()) {
+    if (!entry?.node) {
       continue;
     }
-    applySourceRelativeRotationForSlot(slot, targetNode, sourceNode, runtime.restPose, 1);
+    entry.node.rotation.x = entry.rotation.x;
+    entry.node.rotation.y = entry.rotation.y;
+    entry.node.rotation.z = entry.rotation.z;
   }
 
-  const leftHand = findSourceBone(runtime, "leftHand") ?? findSourceBone(runtime, "leftForeArm");
-  const rightHand = findSourceBone(runtime, "rightHand") ?? findSourceBone(runtime, "rightForeArm");
-  if (leftHand && vrmPreviewModelParts?.leftHand) {
-    applySourceRelativeRotationForSlot("leftHand", vrmPreviewModelParts.leftHand, leftHand, runtime.restPose, 1);
+  const duration = runtime.clip.duration || parseDurationSeconds(motion.duration);
+  const sampledTime = Math.max(state.playbackTime, MOTION_PREVIEW_SAMPLE_TIME);
+  const time = motion.loop ? (sampledTime % duration) : Math.min(sampledTime, duration);
+  if (runtime.action) {
+    runtime.action.enabled = true;
+    runtime.action.paused = false;
+    runtime.action.timeScale = 1;
+    runtime.action.time = time;
+    runtime.action.play();
   }
-  if (rightHand && vrmPreviewModelParts?.rightHand) {
-    applySourceRelativeRotationForSlot("rightHand", vrmPreviewModelParts.rightHand, rightHand, runtime.restPose, 1);
+  runtime.mixer.setTime(time);
+  runtime.mixer.update(1 / 60);
+  if (runtime.action && !state.isPlaying) {
+    runtime.action.paused = true;
   }
-
   return true;
 }
 
@@ -2012,9 +1943,9 @@ function collectModelParts(root) {
       lookup.spine = child;
     } else if (!lookup.hips && matches(name, ["hips", "pelvis", "root", "body"])) {
       lookup.hips = child;
-    } else if (!lookup.leftShoulder && matches(name, ["leftshoulder", "shoulderl", "claviclel"])) {
+    } else if (!lookup.leftShoulder && matches(name, ["leftshoulder", "shoulderl", "claviclel", "jbiplshoulder"])) {
       lookup.leftShoulder = child;
-    } else if (!lookup.rightShoulder && matches(name, ["rightshoulder", "shoulderr", "clavicler"])) {
+    } else if (!lookup.rightShoulder && matches(name, ["rightshoulder", "shoulderr", "clavicler", "jbiprshoulder"])) {
       lookup.rightShoulder = child;
     } else if (!lookup.leftArm && matches(name, ["leftarm", "left_arm", "arm_l", "l_arm", "shoulderl", "upperarm_l"])) {
       lookup.leftArm = child;
@@ -2036,9 +1967,9 @@ function collectModelParts(root) {
       lookup.leftHand = child;
     } else if (!lookup.rightHand && matches(name, ["righthand", "right_hand", "hand_r", "r_hand", "rightwrist", "wrist_r"])) {
       lookup.rightHand = child;
-    } else if (!lookup.leftFoot && matches(name, ["leftfoot", "left_foot", "foot_l", "l_foot", "leftankle", "ankle_l"])) {
+    } else if (!lookup.leftFoot && matches(name, ["leftfoot", "left_foot", "foot_l", "l_foot", "leftankle", "ankle_l", "jbiplfoot"])) {
       lookup.leftFoot = child;
-    } else if (!lookup.rightFoot && matches(name, ["rightfoot", "right_foot", "foot_r", "r_foot", "rightankle", "ankle_r"])) {
+    } else if (!lookup.rightFoot && matches(name, ["rightfoot", "right_foot", "foot_r", "r_foot", "rightankle", "ankle_r", "jbiprfoot"])) {
       lookup.rightFoot = child;
     }
   });
@@ -2089,15 +2020,52 @@ function normalizeBoneKey(value) {
     .replace(/[\s_-]+/g, "");
 }
 
-function isBvhSource(source) {
-  return typeof source === "string" && /\.bvh(\?.*)?$/i.test(source);
-}
-
 function isVrmaSource(source) {
   return typeof source === "string" && /\.vrma(\?.*)?$/i.test(source);
 }
 
+function getVrmPreviewLoader() {
+  if (!vrmPreviewLoader) {
+    vrmPreviewLoader = new GLTFLoader();
+    vrmPreviewLoader.register((parser) => new VRMLoaderPlugin(parser));
+  }
+  return vrmPreviewLoader;
+}
+
+function getVrmaMotionLoader() {
+  if (!vrmaMotionLoader) {
+    vrmaMotionLoader = new GLTFLoader();
+    vrmaMotionLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
+  }
+  return vrmaMotionLoader;
+}
+
 const VRMA_BONE_SLOT_MAP = {
+  hips: "hips",
+  spine: "spine",
+  chest: "chest",
+  upperChest: "chest",
+  neck: "neck",
+  head: "head",
+  leftShoulder: "leftShoulder",
+  rightShoulder: "rightShoulder",
+  leftUpperArm: "leftArm",
+  rightUpperArm: "rightArm",
+  leftLowerArm: "leftForeArm",
+  rightLowerArm: "rightForeArm",
+  leftHand: "leftHand",
+  rightHand: "rightHand",
+  leftUpperLeg: "leftUpLeg",
+  rightUpperLeg: "rightUpLeg",
+  leftLowerLeg: "leftLeg",
+  rightLowerLeg: "rightLeg",
+  leftFoot: "leftFoot",
+  rightFoot: "rightFoot",
+  leftToes: "leftFoot",
+  rightToes: "rightFoot",
+};
+
+const VRM_HUMANOID_SLOT_MAP = {
   hips: "hips",
   spine: "spine",
   chest: "chest",
@@ -2151,6 +2119,37 @@ function getVrmaNodeNameMap(gltf) {
   }
 
   return nodeNameMap;
+}
+
+function getVrmHumanoidBoneKeyMap(gltf) {
+  const json = gltf?.parser?.json ?? {};
+  const extension = json.extensions?.VRMC_vrm
+    ?? gltf?.userData?.gltfExtensions?.VRMC_vrm
+    ?? null;
+  const humanBones = extension?.humanoid?.humanBones ?? {};
+  const nodes = Array.isArray(json.nodes) ? json.nodes : [];
+  const boneKeyMap = new Map();
+
+  for (const [humanBoneName, descriptor] of Object.entries(humanBones)) {
+    const boneKey = VRM_HUMANOID_SLOT_MAP[humanBoneName];
+    if (!boneKey) {
+      continue;
+    }
+
+    const nodeIndex = Number(descriptor?.node);
+    const sourceNode = Number.isInteger(nodeIndex) ? nodes[nodeIndex] : null;
+    const sourceNodeName = typeof sourceNode?.name === "string" ? sourceNode.name.trim() : "";
+    if (!sourceNodeName) {
+      continue;
+    }
+
+    const resolvedKey = guessBoneMap(vrmPreviewBoneOptions, [sourceNodeName, humanBoneName, boneKey]);
+    if (resolvedKey) {
+      boneKeyMap.set(boneKey, resolvedKey);
+    }
+  }
+
+  return boneKeyMap;
 }
 
 function resolveVrmaTargetNode(sourceNodeName, humanBoneName) {
@@ -2247,11 +2246,8 @@ function getVrmaRuntimeSummary(motion) {
     return "VRMA runtime not ready.";
   }
 
-  const missing = Array.isArray(runtime.missingTrackNames) ? runtime.missingTrackNames.slice(0, 4) : [];
-  const missingSuffix = missing.length
-    ? ` · missing: ${missing.join(", ")}${runtime.missingTrackNames.length > missing.length ? "..." : ""}`
-    : "";
-  return `VRMA tracks: ${runtime.mappedTrackCount}/${runtime.sourceTrackCount} mapped${missingSuffix}`;
+  const trackCount = Array.isArray(runtime.clip?.tracks) ? runtime.clip.tracks.length : 0;
+  return `VRMA runtime ready · tracks: ${trackCount}`;
 }
 
 function buildNodeNameSet(root) {
@@ -2316,207 +2312,12 @@ function remapAnimationClip(clip, nodeNameMap, targetNameSet = new Set()) {
   };
 }
 
-function buildSourceBoneIndex(root) {
-  const index = new Map();
-
-  root.traverse?.((child) => {
-    const key = normalizeBoneKey(child.name || child.type || "");
-    if (key && !index.has(key)) {
-      index.set(key, child);
-    }
-  });
-
-  return index;
-}
-
-function findSourceBone(runtime, slot) {
-  if (!runtime?.boneIndex) {
-    return null;
-  }
-
-  const aliases = BONE_ALIAS_SLOTS[slot] ?? [];
-  for (const alias of aliases) {
-    const key = normalizeBoneKey(alias);
-    if (key && runtime.boneIndex.has(key)) {
-      return runtime.boneIndex.get(key) ?? null;
-    }
-  }
-
-  return null;
-}
-
-function applyRestRelativeRotation(targetNode, sourceNode, blend = 1) {
-  if (!targetNode || !sourceNode) {
-    return;
-  }
-
-  const rest = vrmPreviewRestPose.get(targetNode.uuid)?.rotation ?? {
-    x: targetNode.rotation.x,
-    y: targetNode.rotation.y,
-    z: targetNode.rotation.z,
-  };
-
-  targetNode.rotation.x = rest.x + sourceNode.rotation.x * blend;
-  targetNode.rotation.y = rest.y + sourceNode.rotation.y * blend;
-  targetNode.rotation.z = rest.z + sourceNode.rotation.z * blend;
-}
-
-function snapshotNodeRotation(node) {
-  if (!node) {
-    return null;
-  }
-
-  return {
-    x: node.rotation.x,
-    y: node.rotation.y,
-    z: node.rotation.z,
-  };
-}
-
-function snapshotNodeQuaternion(node) {
-  if (!node) {
-    return null;
-  }
-
-  return node.quaternion.clone();
-}
-
-function captureSourceRestPose(root) {
-  const restPose = new Map();
-
-  root.traverse?.((child) => {
-    if (!child) {
-      return;
-    }
-    restPose.set(child.uuid, {
-      rotation: snapshotNodeRotation(child),
-      quaternion: snapshotNodeQuaternion(child),
-    });
-  });
-
-  return restPose;
-}
-
-function applySourceRelativeRotation(targetNode, sourceNode, sourceRestPose, blend = 1) {
-  if (!targetNode || !sourceNode) {
-    return;
-  }
-
-  const targetRest = vrmPreviewRestPose.get(targetNode.uuid)?.quaternion ?? snapshotNodeQuaternion(targetNode);
-  const sourceRest = sourceRestPose?.get(sourceNode.uuid)?.quaternion ?? snapshotNodeQuaternion(sourceNode);
-  const sourceCurrent = snapshotNodeQuaternion(sourceNode);
-
-  const sourceDelta = sourceRest.clone().invert().multiply(sourceCurrent);
-  const correctedDelta = BVH_AXIS_CORRECTION.clone().multiply(sourceDelta).multiply(BVH_AXIS_CORRECTION.clone().invert());
-  const blendedDelta = new THREE.Quaternion().slerpQuaternions(new THREE.Quaternion(), correctedDelta, blend);
-  const targetCurrent = targetRest.clone().multiply(blendedDelta);
-
-  targetNode.quaternion.copy(targetCurrent);
-  targetNode.rotation.setFromQuaternion(targetCurrent, targetNode.rotation.order);
-}
-
-function applySourceRelativeRotationForSlot(slot, targetNode, sourceNode, sourceRestPose, blend = 1) {
-  if (!targetNode || !sourceNode) {
-    return;
-  }
-
-  const targetRest = vrmPreviewRestPose.get(targetNode.uuid)?.quaternion ?? snapshotNodeQuaternion(targetNode);
-  const sourceRest = sourceRestPose?.get(sourceNode.uuid)?.quaternion ?? snapshotNodeQuaternion(sourceNode);
-  const sourceCurrent = snapshotNodeQuaternion(sourceNode);
-
-  const sourceDelta = sourceRest.clone().invert().multiply(sourceCurrent);
-  const correctedDelta = BVH_AXIS_CORRECTION.clone().multiply(sourceDelta).multiply(BVH_AXIS_CORRECTION.clone().invert());
-  const blendedDelta = new THREE.Quaternion().slerpQuaternions(new THREE.Quaternion(), correctedDelta, blend);
-  const targetCurrent = targetRest.clone().multiply(blendedDelta);
-  const isFootSlot = normalizeBoneKey(slot).includes("foot");
-  const correctedTarget = isFootSlot
-    ? targetCurrent.clone().multiply(FOOT_AXIS_CORRECTION)
-    : targetCurrent;
-
-  if (normalizeBoneKey(slot).startsWith("right")) {
-    const mirrored = new THREE.Euler().setFromQuaternion(correctedTarget, "XYZ");
-    mirrored.x *= -1;
-    targetNode.quaternion.setFromEuler(mirrored);
-    targetNode.rotation.setFromQuaternion(targetNode.quaternion, targetNode.rotation.order);
-    return;
-  }
-
-  targetNode.quaternion.copy(correctedTarget);
-  targetNode.rotation.setFromQuaternion(correctedTarget, targetNode.rotation.order);
-}
-
-async function ensureMotionRuntime(motion) {
-  if (!motion?.source || !isBvhSource(motion.source)) {
-    return null;
-  }
-
-  const cached = bvhMotionRuntimeCache.get(motion.source);
-  if (cached) {
-    if (cached.loading) {
-      return cached;
-    }
-    if (cached.ready || cached.error) {
-      return cached;
-    }
-  }
-
-  const entry = {
-    source: motion.source,
-    loading: true,
-    ready: false,
-    error: "",
-    group: null,
-    root: null,
-    clip: null,
-    mixer: null,
-    action: null,
-    boneIndex: new Map(),
-    restPose: new Map(),
-  };
-  bvhMotionRuntimeCache.set(motion.source, entry);
-
-  try {
-    const response = await fetch(motion.source);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const text = await response.text();
-    const loader = motionRuntimeLoader ?? (motionRuntimeLoader = new BVHLoader());
-    const parsed = loader.parse(text);
-    const rootBone = parsed?.skeleton?.bones?.[0] ?? null;
-    if (!rootBone) {
-      throw new Error("BVH root bone not found.");
-    }
-
-    const group = new THREE.Group();
-    group.visible = false;
-    group.add(rootBone);
-    vrmPreviewRoot?.add(group);
-
-    const mixer = new THREE.AnimationMixer(rootBone);
-    const action = mixer.clipAction(parsed.clip);
-    entry.restPose = captureSourceRestPose(rootBone);
-    action.play();
-
-    entry.group = group;
-    entry.root = rootBone;
-    entry.clip = parsed.clip;
-    entry.mixer = mixer;
-    entry.action = action;
-    entry.boneIndex = buildSourceBoneIndex(rootBone);
-    entry.ready = true;
-    entry.loading = false;
-  } catch (error) {
-    entry.error = error instanceof Error ? error.message : String(error);
-    entry.loading = false;
-  }
-
-  return entry;
-}
-
 async function ensureVrmaMotionRuntime(motion) {
   if (!motion?.source || !isVrmaSource(motion.source)) {
+    return null;
+  }
+
+  if (!vrmPreviewVrm?.scene) {
     return null;
   }
 
@@ -2540,73 +2341,37 @@ async function ensureVrmaMotionRuntime(motion) {
     clip: null,
     mixer: null,
     action: null,
-    nodeNameMap: new Map(),
-    sourceTrackCount: 0,
-    mappedTrackCount: 0,
-    missingTrackNames: [],
   };
   vrmaMotionRuntimeCache.set(motion.source, entry);
 
   try {
-    const loader = ensureVrmLoaderPlugins(vrmaMotionLoader ?? (vrmaMotionLoader = new GLTFLoader()));
+    const loader = getVrmaMotionLoader();
     const gltf = await loader.loadAsync(motion.source);
-    const vrmAnimation = gltf?.userData?.vrmAnimations?.[0] ?? null;
-    const sourceClip = gltf?.animations?.[0] ?? null;
-    if (!vrmAnimation && !sourceClip) {
-      throw new Error("VRMA animation clip not found.");
+    const vrmAnimation = gltf?.userData?.vrmAnimations?.[0] ?? gltf?.vrmAnimations?.[0] ?? null;
+    if (!vrmAnimation) {
+      throw new Error("VRMA animation data not found.");
     }
 
-    const vrm = vrmPreviewVrm ?? null;
-    const root = vrm?.scene ?? vrmPreviewModelRoot ?? vrmPreviewRoot;
-    if (!root) {
-      throw new Error("VRM preview root not ready.");
-    }
-
-    const nodeNameMap = getVrmaNodeNameMap(gltf);
-    const targetNameSet = buildNodeNameSet(root);
-    let clip = null;
-    let sourceTrackCount = sourceClip?.tracks?.length ?? 0;
-    let mappedTrackCount = sourceTrackCount;
-    let missingTrackNames = [];
-
-    if (vrmAnimation && vrm) {
-      clip = createVRMAnimationClip(vrmAnimation, vrm);
-      sourceTrackCount = clip.tracks.length;
-      mappedTrackCount = clip.tracks.length;
-    } else if (sourceClip) {
-      const remapped = nodeNameMap.size
-        ? remapAnimationClip(sourceClip, nodeNameMap, targetNameSet)
-        : {
-            clip: sourceClip.clone(),
-            sourceTrackCount: sourceClip.tracks.length,
-            mappedTrackCount: sourceClip.tracks.length,
-            missingTrackNames: [],
-          };
-      clip = remapped.clip;
-      sourceTrackCount = remapped.sourceTrackCount;
-      mappedTrackCount = remapped.mappedTrackCount;
-      missingTrackNames = remapped.missingTrackNames;
-    }
+    const clip = createVRMAnimationClip(vrmAnimation, vrmPreviewVrm);
     if (!clip) {
-      throw new Error("VRMA animation clip remap failed.");
+      throw new Error("VRMA animation clip creation failed.");
     }
 
-    const mixer = new THREE.AnimationMixer(vrm?.scene ?? root);
+    const mixer = new THREE.AnimationMixer(vrmPreviewVrm.scene);
     const action = mixer.clipAction(clip);
     action.loop = motion.loop ? THREE.LoopRepeat : THREE.LoopOnce;
     action.clampWhenFinished = !motion.loop;
     action.reset();
+    action.enabled = true;
+    action.paused = false;
+    action.timeScale = 1;
     action.play();
 
-    entry.group = root;
-    entry.root = root;
+    entry.group = vrmPreviewVrm.scene;
+    entry.root = vrmPreviewVrm.scene;
     entry.clip = clip;
     entry.mixer = mixer;
     entry.action = action;
-    entry.nodeNameMap = nodeNameMap;
-    entry.sourceTrackCount = sourceTrackCount;
-    entry.mappedTrackCount = mappedTrackCount;
-    entry.missingTrackNames = missingTrackNames;
     entry.ready = true;
     entry.loading = false;
   } catch (error) {
@@ -2915,14 +2680,14 @@ async function loadVrmPreview(source, label) {
 
   const token = ++state.loadedVrmToken;
   const previousUrl = state.loadedVrmUrl;
-  bvhMotionRuntimeCache.clear();
   vrmaMotionRuntimeCache.clear();
+  vrmPreviewVrm = null;
   state.loadedVrmName = label || source;
   state.loadedVrmUrl = source;
   refs.loadedVrmLabel.textContent = `Loading: ${state.loadedVrmName}`;
   render();
 
-  const loader = ensureVrmLoaderPlugins(vrmPreviewLoader ?? (vrmPreviewLoader = new GLTFLoader()));
+  const loader = getVrmPreviewLoader();
 
   try {
     const gltf = await loader.loadAsync(source);
@@ -2931,7 +2696,7 @@ async function loadVrmPreview(source, label) {
     }
 
     clearPreviewModel();
-    vrmPreviewVrm = gltf.userData?.vrm ?? null;
+    vrmPreviewVrm = gltf?.userData?.vrm ?? null;
     const modelRoot = gltf.scene ?? gltf.scenes?.[0] ?? null;
     if (!modelRoot) {
       throw new Error("No scene found in VRM asset.");
@@ -2953,26 +2718,27 @@ async function loadVrmPreview(source, label) {
     vrmPreviewBoneOptions = collectBoneOptions(modelRoot);
     buildPreviewBoneIndex();
     capturePreviewRestPose();
+    const vrmHumanoidBoneKeyMap = getVrmHumanoidBoneKeyMap(gltf);
     state.boneMap = {
-      hips: guessBoneMap(vrmPreviewBoneOptions, ["hips", "pelvis", "root", "body"]) || state.boneMap.hips,
-      spine: guessBoneMap(vrmPreviewBoneOptions, ["spine", "spine1", "torso"]) || state.boneMap.spine,
-      chest: guessBoneMap(vrmPreviewBoneOptions, ["chest", "spine", "upper"]) || state.boneMap.chest,
-      neck: guessBoneMap(vrmPreviewBoneOptions, ["neck"]) || state.boneMap.neck,
-      head: guessBoneMap(vrmPreviewBoneOptions, ["head", "face"]) || state.boneMap.head,
-      leftShoulder: guessBoneMap(vrmPreviewBoneOptions, ["leftshoulder", "claviclel"]) || state.boneMap.leftShoulder,
-      rightShoulder: guessBoneMap(vrmPreviewBoneOptions, ["rightshoulder", "clavicler"]) || state.boneMap.rightShoulder,
-      leftArm: guessBoneMap(vrmPreviewBoneOptions, ["leftarm", "arm_l", "l_arm", "upperarm_l"]) || state.boneMap.leftArm,
-      rightArm: guessBoneMap(vrmPreviewBoneOptions, ["rightarm", "arm_r", "r_arm", "upperarm_r"]) || state.boneMap.rightArm,
-      leftForeArm: guessBoneMap(vrmPreviewBoneOptions, ["leftforearm", "forearm_l", "lowerarm_l"]) || state.boneMap.leftForeArm,
-      rightForeArm: guessBoneMap(vrmPreviewBoneOptions, ["rightforearm", "forearm_r", "lowerarm_r"]) || state.boneMap.rightForeArm,
-      leftUpLeg: guessBoneMap(vrmPreviewBoneOptions, ["leftupleg", "upperleg_l", "leftthigh"]) || state.boneMap.leftUpLeg,
-      rightUpLeg: guessBoneMap(vrmPreviewBoneOptions, ["rightupleg", "upperleg_r", "rightthigh"]) || state.boneMap.rightUpLeg,
-      leftLeg: guessBoneMap(vrmPreviewBoneOptions, ["leftleg", "leg_l", "l_leg", "lowerleg_l", "shin_l", "calf_l"]) || state.boneMap.leftLeg,
-      rightLeg: guessBoneMap(vrmPreviewBoneOptions, ["rightleg", "leg_r", "r_leg", "lowerleg_r", "shin_r", "calf_r"]) || state.boneMap.rightLeg,
-      leftHand: guessBoneMap(vrmPreviewBoneOptions, ["lefthand", "hand_l", "wrist_l"]) || state.boneMap.leftHand,
-      rightHand: guessBoneMap(vrmPreviewBoneOptions, ["righthand", "hand_r", "wrist_r"]) || state.boneMap.rightHand,
-      leftFoot: guessBoneMap(vrmPreviewBoneOptions, ["leftfoot", "footl", "ankle_l", "lefttoe"]) || state.boneMap.leftFoot,
-      rightFoot: guessBoneMap(vrmPreviewBoneOptions, ["rightfoot", "footr", "ankle_r", "righttoe"]) || state.boneMap.rightFoot,
+      hips: vrmHumanoidBoneKeyMap.get("hips") || guessBoneMap(vrmPreviewBoneOptions, ["hips", "pelvis", "root", "body"]) || state.boneMap.hips,
+      spine: vrmHumanoidBoneKeyMap.get("spine") || guessBoneMap(vrmPreviewBoneOptions, ["spine", "spine1", "torso"]) || state.boneMap.spine,
+      chest: vrmHumanoidBoneKeyMap.get("chest") || guessBoneMap(vrmPreviewBoneOptions, ["chest", "spine", "upper"]) || state.boneMap.chest,
+      neck: vrmHumanoidBoneKeyMap.get("neck") || guessBoneMap(vrmPreviewBoneOptions, ["neck"]) || state.boneMap.neck,
+      head: vrmHumanoidBoneKeyMap.get("head") || guessBoneMap(vrmPreviewBoneOptions, ["head", "face"]) || state.boneMap.head,
+      leftShoulder: vrmHumanoidBoneKeyMap.get("leftShoulder") || guessBoneMap(vrmPreviewBoneOptions, ["leftshoulder", "claviclel", "jbiplshoulder"]) || state.boneMap.leftShoulder,
+      rightShoulder: vrmHumanoidBoneKeyMap.get("rightShoulder") || guessBoneMap(vrmPreviewBoneOptions, ["rightshoulder", "clavicler", "jbiprshoulder"]) || state.boneMap.rightShoulder,
+      leftArm: vrmHumanoidBoneKeyMap.get("leftArm") || guessBoneMap(vrmPreviewBoneOptions, ["leftarm", "arm_l", "l_arm", "upperarm_l"]) || state.boneMap.leftArm,
+      rightArm: vrmHumanoidBoneKeyMap.get("rightArm") || guessBoneMap(vrmPreviewBoneOptions, ["rightarm", "arm_r", "r_arm", "upperarm_r"]) || state.boneMap.rightArm,
+      leftForeArm: vrmHumanoidBoneKeyMap.get("leftForeArm") || guessBoneMap(vrmPreviewBoneOptions, ["leftforearm", "forearm_l", "lowerarm_l"]) || state.boneMap.leftForeArm,
+      rightForeArm: vrmHumanoidBoneKeyMap.get("rightForeArm") || guessBoneMap(vrmPreviewBoneOptions, ["rightforearm", "forearm_r", "lowerarm_r"]) || state.boneMap.rightForeArm,
+      leftUpLeg: vrmHumanoidBoneKeyMap.get("leftUpLeg") || guessBoneMap(vrmPreviewBoneOptions, ["leftupleg", "upperleg_l", "leftthigh"]) || state.boneMap.leftUpLeg,
+      rightUpLeg: vrmHumanoidBoneKeyMap.get("rightUpLeg") || guessBoneMap(vrmPreviewBoneOptions, ["rightupleg", "upperleg_r", "rightthigh"]) || state.boneMap.rightUpLeg,
+      leftLeg: vrmHumanoidBoneKeyMap.get("leftLeg") || guessBoneMap(vrmPreviewBoneOptions, ["leftleg", "leg_l", "l_leg", "lowerleg_l", "shin_l", "calf_l"]) || state.boneMap.leftLeg,
+      rightLeg: vrmHumanoidBoneKeyMap.get("rightLeg") || guessBoneMap(vrmPreviewBoneOptions, ["rightleg", "leg_r", "r_leg", "lowerleg_r", "shin_r", "calf_r"]) || state.boneMap.rightLeg,
+      leftHand: vrmHumanoidBoneKeyMap.get("leftHand") || guessBoneMap(vrmPreviewBoneOptions, ["lefthand", "hand_l", "wrist_l"]) || state.boneMap.leftHand,
+      rightHand: vrmHumanoidBoneKeyMap.get("rightHand") || guessBoneMap(vrmPreviewBoneOptions, ["righthand", "hand_r", "wrist_r"]) || state.boneMap.rightHand,
+      leftFoot: vrmHumanoidBoneKeyMap.get("leftFoot") || guessBoneMap(vrmPreviewBoneOptions, ["leftfoot", "footl", "ankle_l", "lefttoe", "jbiplfoot"]) || state.boneMap.leftFoot,
+      rightFoot: vrmHumanoidBoneKeyMap.get("rightFoot") || guessBoneMap(vrmPreviewBoneOptions, ["rightfoot", "footr", "ankle_r", "righttoe", "jbiprfoot"]) || state.boneMap.rightFoot,
     };
     vrmPreviewModelParts = collectModelParts(modelRoot);
     applyBoneMapToParts();
@@ -2997,7 +2763,6 @@ async function loadVrmPreview(source, label) {
     vrmPreviewBoneOptions = [];
     vrmPreviewBoneIndex = new Map();
     vrmPreviewRestPose = new Map();
-    vrmPreviewVrm = null;
     populateBoneControls();
     updatePreviewContentVisibility();
     render();
@@ -3034,6 +2799,7 @@ async function init() {
   refs.overlayId = document.getElementById("overlayId");
   refs.overlayAlias = document.getElementById("overlayAlias");
   refs.timelineProgress = document.getElementById("timelineProgress");
+  refs.seekStatus = document.getElementById("seekStatus");
   refs.footerSummary = document.getElementById("footerSummary");
   refs.detailId = document.getElementById("detailId");
   refs.detailAlias = document.getElementById("detailAlias");
@@ -3070,6 +2836,7 @@ async function init() {
   refs.bonePreviewCanvas = document.getElementById("bonePreviewCanvas");
   refs.bonePreviewNote = document.getElementById("bonePreviewNote");
   refs.playButton = document.getElementById("playButton");
+  refs.pauseButton = document.getElementById("pauseButton");
   refs.stopButton = document.getElementById("stopButton");
   refs.loopButton = document.getElementById("loopButton");
   refs.bonePreviewToggleButton = document.getElementById("bonePreviewToggleButton");
@@ -3078,14 +2845,8 @@ async function init() {
   refs.clearLocalSaveButton = document.getElementById("clearLocalSaveButton");
   refs.exportDatasetButton = document.getElementById("exportDatasetButton");
   refs.importDatasetButton = document.getElementById("importDatasetButton");
+  refs.clearMotionSelectionButton = document.getElementById("clearMotionSelectionButton");
   refs.datasetFileInput = document.getElementById("datasetFileInput");
-  refs.vrmToolsSection = document.getElementById("vrmToolsSection");
-  refs.vrmToolsToggle = document.getElementById("vrmToolsToggle");
-  refs.vrmToolsState = document.getElementById("vrmToolsState");
-  refs.vrmHandTarget = document.getElementById("vrmHandTarget");
-  refs.vrmHandPreset = document.getElementById("vrmHandPreset");
-  refs.applyVrmHandPoseButton = document.getElementById("applyVrmHandPoseButton");
-  refs.vrmToolsNote = document.getElementById("vrmToolsNote");
   refs.loadVrmButton = document.getElementById("loadVrmButton");
   refs.previewAutoRotateButton = document.getElementById("previewAutoRotateButton");
   refs.vrmFileInput = document.getElementById("vrmFileInput");
@@ -3093,6 +2854,7 @@ async function init() {
   refs.saveStatus = document.getElementById("saveStatus");
   refs.loadedVrmLabel = document.getElementById("loadedVrmLabel");
   refs.previewSplit = document.getElementById("previewSplit");
+  refs.previewDivider = document.getElementById("previewDivider");
   refs.previewStage = document.getElementById("previewStage");
   refs.vrmPreviewCanvas = document.getElementById("vrmPreviewCanvas");
   refs.tabButtons = [...document.querySelectorAll(".tab")];
@@ -3108,6 +2870,7 @@ async function init() {
   setupVrmPreview();
   bonePreviewCanvas = refs.bonePreviewCanvas;
   setupBonePreview();
+  initializePreviewSplitWidth();
   state.loadedVrmName = STANDARD_VRM_LABEL;
   state.loadedVrmUrl = STANDARD_VRM_SOURCE;
   refs.loadedVrmLabel.textContent = `Loading: ${STANDARD_VRM_LABEL}`;
@@ -3118,12 +2881,20 @@ async function init() {
   });
 
   refs.playButton.addEventListener("click", () => {
-    const motion = getSelectedMotion();
+    const motion = getSelectedMotion() ?? getDefaultMotion();
     if (!motion) {
+      return;
+    }
+    if (state.isPaused && state.playbackMotionId === motion.id) {
+      resumeMotionPlayback();
       return;
     }
     syncPlaybackToSelection(true);
     startMotionPlayback(motion);
+  });
+
+  refs.pauseButton?.addEventListener("click", () => {
+    pauseMotionPlayback();
   });
 
   refs.stopButton.addEventListener("click", () => {
@@ -3140,6 +2911,10 @@ async function init() {
       state.playbackTime = Math.min(state.playbackTime, parseDurationSeconds(motion.duration));
     }
     render();
+  });
+
+  refs.clearMotionSelectionButton?.addEventListener("click", () => {
+    selectRestPose();
   });
 
   for (const button of refs.sceneCameraButtons) {
@@ -3173,44 +2948,6 @@ async function init() {
 
   refs.importDatasetButton.addEventListener("click", () => {
     refs.datasetFileInput?.click();
-  });
-
-  refs.vrmToolsToggle?.addEventListener("click", () => {
-    state.showVrmTools = !state.showVrmTools;
-    persistState("Saved locally");
-    render();
-  });
-
-  refs.vrmHandTarget?.addEventListener("change", () => {
-    const next = refs.vrmHandTarget.value;
-    if (VRM_HAND_TARGETS.includes(next)) {
-      state.vrmHandTarget = next;
-      persistState("Saved locally");
-      render();
-    }
-  });
-
-  refs.vrmHandPreset?.addEventListener("change", () => {
-    const next = refs.vrmHandPreset.value;
-    if (VRM_HAND_PRESETS.includes(next)) {
-      state.vrmHandPreset = next;
-      persistState("Saved locally");
-      render();
-    }
-  });
-
-  refs.applyVrmHandPoseButton?.addEventListener("click", () => {
-    const motion = getSelectedMotion();
-    if (!motion) {
-      return;
-    }
-
-    motion.fingerAdjustments = state.vrmHandPreset === "reset"
-      ? []
-      : buildFingerAdjustmentsForHand(state.vrmHandTarget, state.vrmHandPreset);
-
-    persistState("Saved locally");
-    render();
   });
 
   refs.datasetFileInput.addEventListener("change", async () => {
@@ -3319,6 +3056,48 @@ async function init() {
   refs.vrmPreviewCanvas.addEventListener("pointerup", endPreviewDrag);
   refs.vrmPreviewCanvas.addEventListener("pointercancel", endPreviewDrag);
 
+  refs.previewDivider?.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || !refs.previewSplit) {
+      return;
+    }
+    event.preventDefault();
+    refs.previewDivider.setPointerCapture(event.pointerId);
+    const rect = refs.previewSplit.getBoundingClientRect();
+    previewSplitDragState = {
+      startX: event.clientX,
+      startWidth: state.previewSplitWidth || 360,
+      left: rect.left,
+      width: rect.width,
+    };
+    refs.previewDivider.classList.add("is-dragging");
+  });
+
+  refs.previewDivider?.addEventListener("pointermove", (event) => {
+    if (!previewSplitDragState || !refs.previewSplit) {
+      return;
+    }
+    const rect = refs.previewSplit.getBoundingClientRect();
+    const deltaX = event.clientX - previewSplitDragState.startX;
+    const usableWidth = Math.max(440, rect.width - 10);
+    const nextWidth = Math.max(220, Math.min(480, previewSplitDragState.startWidth + deltaX));
+    const maxWidth = Math.max(220, usableWidth - 220);
+    state.previewSplitWidth = Math.max(220, Math.min(nextWidth, maxWidth));
+    applyPreviewSplitWidth(state.previewSplitWidth);
+    renderPreviewFrame();
+    renderBonePreviewFrame();
+  });
+
+  const endPreviewSplitDrag = (event) => {
+    if (refs.previewDivider?.hasPointerCapture?.(event.pointerId)) {
+      refs.previewDivider.releasePointerCapture(event.pointerId);
+    }
+    previewSplitDragState = null;
+    refs.previewDivider?.classList.remove("is-dragging");
+  };
+
+  refs.previewDivider?.addEventListener("pointerup", endPreviewSplitDrag);
+  refs.previewDivider?.addEventListener("pointercancel", endPreviewSplitDrag);
+
   for (const button of refs.previewRotateButtons) {
     button.addEventListener("click", () => {
       state.previewRotationY = Number(button.dataset.previewRotate || "0");
@@ -3343,6 +3122,7 @@ async function init() {
   });
 
   window.addEventListener("resize", () => {
+    applyPreviewSplitWidth(state.previewSplitWidth);
     renderPreviewFrame();
     renderBonePreviewFrame();
   });
@@ -3359,10 +3139,30 @@ async function init() {
     const duration = motion ? parseDurationSeconds(motion.duration) : 1;
     state.playbackTime = (duration * value) / 100;
     state.playbackProgress = value / 100;
-    refs.timelineProgress.style.width = `${Math.max(8, Math.min(100, value))}%`;
-    if (state.isPlaying && motion) {
-      state.playing = motion.displayName;
+    if (motion) {
+      state.playbackMotionId = motion.id;
+      state.isPlaying = false;
+      state.isPaused = true;
+      state.playing = `Paused: ${motion.displayName}`;
     }
+    refs.timelineProgress.style.width = `${Math.max(8, Math.min(100, value))}%`;
+    updateSeekStatus(motion);
+    renderPreviewFrame();
+  });
+
+  refs.seekLabel.addEventListener("pointerdown", () => {
+    const motion = getCurrentMotion();
+    if (!motion) {
+      return;
+    }
+
+    state.playbackTime = 0;
+    state.playbackProgress = 0;
+    state.playbackMotionId = motion.id;
+    state.isPlaying = false;
+    state.isPaused = false;
+    state.playing = motion.displayName;
+    updateSeekStatus(motion);
     renderPreviewFrame();
   });
 
