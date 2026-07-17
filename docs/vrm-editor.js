@@ -118,8 +118,6 @@ const DATASET_SOURCES = [
 ];
 const STANDARD_VRM_SOURCE = "./assets/vrm/standard/standard.vrm";
 const STANDARD_VRM_LABEL = "Standard VRM";
-const REST_POSE_ID = "__rest_pose__";
-const REST_POSE_LABEL = "T-Pose";
 const MOTION_PREVIEW_SAMPLE_TIME = 0.0;
 const REQUIRED_BONE_SLOTS = ["leftShoulder", "rightShoulder", "leftFoot", "rightFoot"];
 const BONE_ALIAS_SLOTS = {
@@ -669,39 +667,6 @@ function showMotionPose(motion = getSelectedMotion() ?? getDefaultMotion()) {
   renderPreviewFrame();
 }
 
-function selectRestPose() {
-  resetPreviewPose();
-  state.selectedId = REST_POSE_ID;
-  state.playbackMotionId = "";
-  state.isPlaying = false;
-  state.isPaused = false;
-  state.playbackTime = 0;
-  state.playbackProgress = 0;
-  state.playing = REST_POSE_LABEL;
-  render();
-  renderPreviewFrame();
-}
-
-function resetPreviewPose() {
-  for (const entry of vrmPreviewRestPose.values()) {
-    if (!entry?.node) {
-      continue;
-    }
-    entry.node.rotation.x = entry.rotation.x;
-    entry.node.rotation.y = entry.rotation.y;
-    entry.node.rotation.z = entry.rotation.z;
-    if (entry.quaternion) {
-      entry.node.quaternion.copy(entry.quaternion);
-    }
-  }
-
-  for (const runtime of vrmaMotionRuntimeCache.values()) {
-    runtime.action?.stop?.();
-    runtime.action = null;
-    runtime.mixer?.stopAllAction?.();
-  }
-}
-
 function getSeekStatusText(motion = getCurrentMotion()) {
   if (!motion) {
     return "Seek: 0% / Stop: 0.00s";
@@ -738,7 +703,7 @@ function pauseMotionPlayback() {
 
 function resumeMotionPlayback() {
   if (!state.playbackMotionId) {
-    const motion = getSelectedMotion() ?? getDefaultMotion();
+    const motion = getPlaybackTargetMotion();
     if (!motion) {
       return;
     }
@@ -1076,26 +1041,6 @@ function renderMotionList() {
     refs.motionList.appendChild(errorCard);
   }
 
-  const restPoseCard = document.createElement("article");
-  restPoseCard.className = `motion-card${state.selectedId === REST_POSE_ID ? " active" : ""}`;
-  restPoseCard.tabIndex = 0;
-  restPoseCard.innerHTML = `
-    <div class="motion-title"><span>${REST_POSE_LABEL}</span><span>fixed</span></div>
-    <div class="motion-subtitle">固定の休止姿勢です。データセットには保存されません。</div>
-    <div class="tag-row">
-      <span class="tag">rest</span>
-      <span class="tag">pose</span>
-      <span class="tag">fixed</span>
-    </div>
-  `;
-  restPoseCard.addEventListener("click", () => {
-    selectRestPose();
-  });
-  restPoseCard.addEventListener("dblclick", () => {
-    selectRestPose();
-  });
-  refs.motionList.appendChild(restPoseCard);
-
   if (!filtered.length) {
     const empty = document.createElement("div");
     empty.className = "motion-card";
@@ -1131,40 +1076,6 @@ function renderMotionList() {
 function renderDetails() {
   const motion = getSelectedMotion();
   const playbackMotion = getCurrentMotion();
-
-  if (state.selectedId === REST_POSE_ID) {
-    refs.detailId.textContent = REST_POSE_LABEL;
-    refs.detailAlias.value = "Rest Pose";
-    refs.detailDisplayName.value = REST_POSE_LABEL;
-    refs.detailSource.value = "fixed";
-    refs.detailTags.value = "rest, pose, fixed";
-    refs.detailPriority.value = "0";
-    refs.detailLoop.value = "false";
-    refs.overlayId.textContent = REST_POSE_LABEL;
-    refs.overlayAlias.textContent = "fixed";
-    refs.playingLabel.textContent = `Playing: ${REST_POSE_LABEL}`;
-    refs.timelineProgress.style.width = "0%";
-    refs.loadedVrmLabel.textContent = state.loadedVrmName ? `Loaded: ${state.loadedVrmName}` : "No VRM loaded.";
-    refs.footerSummary.textContent = "Fixed rest pose";
-    refs.saveStatus.textContent = state.saveStatus;
-    if (refs.playButton) {
-      refs.playButton.classList.remove("active");
-      refs.playButton.textContent = "Play";
-    }
-    if (refs.pauseButton) {
-      refs.pauseButton.classList.remove("active");
-      refs.pauseButton.disabled = true;
-    }
-    if (refs.stopButton) {
-      refs.stopButton.classList.add("active");
-    }
-    if (refs.loopButton) {
-      refs.loopButton.classList.remove("active");
-    }
-    populateBoneControls();
-    updateSeekStatus(null);
-    return;
-  }
 
   if (!motion) {
     refs.detailId.textContent = "-";
@@ -1734,6 +1645,7 @@ function ensurePreviewRig() {
     }),
   );
   placeholderSphere.renderOrder = 1001;
+  placeholderSphere.visible = false;
   placeholderDot.add(placeholderSphere);
 
   vrmPreviewRig.userData.parts = {
@@ -2914,7 +2826,14 @@ async function init() {
   });
 
   refs.clearMotionSelectionButton?.addEventListener("click", () => {
-    selectRestPose();
+    state.selectedId = "";
+    state.playbackMotionId = "";
+    state.isPlaying = false;
+    state.playing = "Stopped";
+    state.playbackTime = 0;
+    state.playbackProgress = 0;
+    render();
+    renderPreviewFrame();
   });
 
   for (const button of refs.sceneCameraButtons) {
