@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin } from "@pixiv/three-vrm";
 import { VRMAnimationLoaderPlugin, VRMLookAtQuaternionProxy, createVRMAnimationClip } from "@pixiv/three-vrm-animation";
-import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
+import { FilesetResolver, PoseLandmarker, HandLandmarker, FaceLandmarker } from "@mediapipe/tasks-vision";
 
 const DEFAULT_MOTIONS = [];
 
@@ -44,6 +44,7 @@ const state = {
   previewRotationY: 0,
   previewAutoRotate: false,
   showBonePreview: true,
+  bonePreviewCaptureSwap: false,
   previewZoom: 1,
   previewOffsetX: 0,
   previewOffsetY: 0,
@@ -106,13 +107,17 @@ let vrmPreviewBoneIndex = new Map();
 let vrmPreviewRestPose = new Map();
 let vrmaMotionRuntimeCache = new Map();
 let vrmPreviewLookAtQuaternionProxy = null;
+let cameraCapturePoseFrameCount = 0;
+let cameraCaptureLastDebugSignature = "";
 let cameraCaptureStream = null;
 let cameraCaptureVideo = null;
 let cameraCaptureOverlay = null;
 let cameraCaptureInputCanvas = null;
 let cameraCaptureInputContext = null;
 let cameraCaptureContext = null;
-let cameraCaptureLandmarker = null;
+let cameraCapturePoseLandmarker = null;
+let cameraCaptureHandLandmarker = null;
+let cameraCaptureFaceLandmarker = null;
 let cameraCaptureInitPromise = null;
 let cameraCaptureFrameHandle = 0;
 let cameraCaptureLatestResult = null;
@@ -123,8 +128,12 @@ let bonePreviewCamera = null;
 let bonePreviewRenderer = null;
 let bonePreviewRoot = null;
 let bonePreviewLine = null;
+let bonePreviewCaptureLine = null;
 let bonePreviewDots = [];
+let bonePreviewCaptureDots = [];
 let bonePreviewNodeToDot = new Map();
+let bonePreviewCaptureNodeToDot = new Map();
+let bonePreviewLabelLayer = null;
 let bonePreviewRaycaster = null;
 let bonePreviewPointer = null;
 let bonePreviewDragState = null;
@@ -135,6 +144,11 @@ const DATASET_REGISTRY_KEY = "game-engine.vrm-editor.datasets.v1";
 const DATASET_SAVE_PREFIX = "game-engine.vrm-editor.dataset.v1.";
 const STORAGE_SCHEMA_VERSION = 3;
 const LEGACY_STORAGE_KEYS = ["game-engine.vrm-editor.v1", "game-engine.vrm-editor.v2"];
+const CAMERA_CAPTURE_DEBUG = false;
+const MEDIAPIPE_VISION_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
+const MEDIAPIPE_POSE_MODEL = "./landmarkerModel/pose_landmarker_full.task";
+const MEDIAPIPE_HAND_MODEL = "./landmarkerModel/hand_landmarker.task";
+const MEDIAPIPE_FACE_MODEL = "./landmarkerModel/face_landmarker.task";
 const DATASET_SOURCES = [
   { id: "dataset2", label: "Dataset 2", source: "./datasets/dataset2.json" },
   { id: "dataset3", label: "Dataset 3", source: "./datasets/dataset3.json" },
@@ -143,8 +157,6 @@ const DATASET_SOURCES = [
 ];
 const STANDARD_VRM_SOURCE = "./assets/vrm/standard/standard.vrm";
 const STANDARD_VRM_LABEL = "Standard VRM";
-const MEDIAPIPE_VISION_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
-const MEDIAPIPE_POSE_MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const MOTION_PREVIEW_SAMPLE_TIME = 0.0;
 const REQUIRED_BONE_SLOTS = ["leftShoulder", "rightShoulder", "leftFoot", "rightFoot"];
 const BONE_ALIAS_SLOTS = {
@@ -374,6 +386,18 @@ function cloneCameraLandmarkSet(value) {
   return value.map((entry) => cloneCameraLandmark(entry)).filter(Boolean);
 }
 
+function cloneCameraData(value) {
+  if (value == null) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return [];
+  }
+}
+
 function cloneCameraCapture(value) {
   if (!value || typeof value !== "object") {
     return null;
@@ -392,6 +416,17 @@ function cloneCameraCapture(value) {
     score: Number.isFinite(Number(value.score)) ? Number(value.score) : 0,
     poseLandmarks: cloneCameraLandmarkSet(value.poseLandmarks),
     poseWorldLandmarks: cloneCameraLandmarkSet(value.poseWorldLandmarks),
+    handLandmarks: Array.isArray(value.handLandmarks)
+      ? value.handLandmarks.map((set) => cloneCameraLandmarkSet(set))
+      : [],
+    handWorldLandmarks: Array.isArray(value.handWorldLandmarks)
+      ? value.handWorldLandmarks.map((set) => cloneCameraLandmarkSet(set))
+      : [],
+    handedness: cloneCameraData(value.handedness),
+    faceLandmarks: Array.isArray(value.faceLandmarks)
+      ? value.faceLandmarks.map((set) => cloneCameraLandmarkSet(set))
+      : [],
+    faceBlendshapes: cloneCameraData(value.faceBlendshapes),
   };
 }
 
@@ -975,11 +1010,30 @@ function updateCameraCaptureStatus(message, error = "") {
   state.cameraCaptureStatus = message;
   state.cameraCaptureError = error;
   if (refs.cameraCaptureState) {
-    refs.cameraCaptureState.textContent = message;
+    refs.cameraCaptureState.textContent = state.cameraCaptureActive
+      ? "Tracking pose / face / hands"
+      : message;
   }
   if (refs.cameraCaptureNote) {
     refs.cameraCaptureNote.textContent = error ? `${message} · ${error}` : message;
   }
+}
+
+function debugCameraCapture(message, data = null, level = "debug") {
+  if (!CAMERA_CAPTURE_DEBUG) {
+    return;
+  }
+
+  if (typeof console === "undefined" || typeof console[level] !== "function") {
+    return;
+  }
+
+  if (data === null) {
+    console[level](`[camera-capture] ${message}`);
+    return;
+  }
+
+  console[level](`[camera-capture] ${message}`, data);
 }
 
 function getCameraCaptureOverlaySize() {
@@ -1142,15 +1196,23 @@ function drawCameraCaptureOverlay(result) {
   context.restore();
 
   if (refs.cameraCaptureOverlayBadge) {
+    const handCount = Array.isArray(result?.handLandmarks) ? result.handLandmarks.length : 0;
+    const faceCount = Array.isArray(result?.faceLandmarks) && result.faceLandmarks[0]
+      ? result.faceLandmarks[0].length
+      : 0;
     refs.cameraCaptureOverlayBadge.textContent = cameraCaptureLatestResult
-      ? `Tracked ${landmarks.length} landmarks`
+      ? `Pose ${landmarks.length}${handCount ? ` · Hands ${handCount}` : ""}${faceCount ? ` · Face ${faceCount}` : ""}`
       : "Tracking...";
   }
 }
 
-async function ensureCameraCaptureLandmarker() {
-  if (cameraCaptureLandmarker) {
-    return cameraCaptureLandmarker;
+async function ensureCameraCaptureLandmarkers() {
+  if (cameraCapturePoseLandmarker && cameraCaptureHandLandmarker && cameraCaptureFaceLandmarker) {
+    return {
+      pose: cameraCapturePoseLandmarker,
+      hand: cameraCaptureHandLandmarker,
+      face: cameraCaptureFaceLandmarker,
+    };
   }
 
   if (cameraCaptureInitPromise) {
@@ -1159,25 +1221,72 @@ async function ensureCameraCaptureLandmarker() {
 
   cameraCaptureInitPromise = (async () => {
     const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_VISION_WASM);
-    return PoseLandmarker.createFromOptions(fileset, {
-      baseOptions: {
-        modelAssetPath: MEDIAPIPE_POSE_MODEL,
-      },
-      runningMode: "VIDEO",
-      numPoses: 1,
-    });
+    const [pose, hand, face] = await Promise.all([
+      PoseLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: MEDIAPIPE_POSE_MODEL,
+        },
+        runningMode: "VIDEO",
+        numPoses: 1,
+      }),
+      HandLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: MEDIAPIPE_HAND_MODEL,
+        },
+        runningMode: "VIDEO",
+        numHands: 2,
+      }),
+      FaceLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: MEDIAPIPE_FACE_MODEL,
+        },
+        runningMode: "VIDEO",
+        numFaces: 1,
+      }),
+    ]);
+
+    cameraCapturePoseLandmarker = pose;
+    cameraCaptureHandLandmarker = hand;
+    cameraCaptureFaceLandmarker = face;
+    return { pose, hand, face };
   })();
 
   try {
-    cameraCaptureLandmarker = await cameraCaptureInitPromise;
-    return cameraCaptureLandmarker;
+    return await cameraCaptureInitPromise;
   } finally {
     cameraCaptureInitPromise = null;
   }
 }
 
+function buildCameraCaptureResult(poseResult, handResult, faceResult) {
+  const poseLandmarks = Array.isArray(poseResult?.landmarks) ? poseResult.landmarks : [];
+  const poseWorldLandmarks = Array.isArray(poseResult?.worldLandmarks) ? poseResult.worldLandmarks : [];
+  const handLandmarks = Array.isArray(handResult?.landmarks) ? handResult.landmarks : [];
+  const handWorldLandmarks = Array.isArray(handResult?.worldLandmarks) ? handResult.worldLandmarks : [];
+  const handedness = Array.isArray(handResult?.handedness) ? handResult.handedness : [];
+  const faceLandmarks = Array.isArray(faceResult?.faceLandmarks) ? faceResult.faceLandmarks : [];
+  const faceBlendshapes = Array.isArray(faceResult?.faceBlendshapes) ? faceResult.faceBlendshapes : [];
+  return {
+    provider: "mediapipe",
+    mode: "pose-hand-face",
+    capturedAt: new Date().toISOString(),
+    frameSize: [
+      refs.cameraCaptureVideo?.videoWidth || 0,
+      refs.cameraCaptureVideo?.videoHeight || 0,
+    ],
+    score: poseLandmarks[0]?.length ? 1 : 0,
+    poseLandmarks,
+    poseWorldLandmarks,
+    handLandmarks,
+    handWorldLandmarks,
+    handedness,
+    faceLandmarks,
+    faceBlendshapes,
+  };
+}
+
 async function startCameraCaptureLoop(sessionId) {
-  if (!refs.cameraCaptureVideo || !cameraCaptureLandmarker) {
+  if (!refs.cameraCaptureVideo || !cameraCapturePoseLandmarker || !cameraCaptureHandLandmarker || !cameraCaptureFaceLandmarker) {
     return;
   }
 
@@ -1194,28 +1303,23 @@ async function startCameraCaptureLoop(sessionId) {
     }
 
     try {
-      if (!cameraCaptureInputCanvas || !cameraCaptureInputContext) {
-        const size = Math.max(2, Math.floor(Math.min(video.videoWidth || 0, video.videoHeight || 0)));
-        const input = resizeCameraCaptureInputCanvas(size, size);
-        if (!input) {
-          return;
-        }
-      }
-      if (!updateCameraCaptureInputCanvas()) {
-        return;
-      }
       const now = performance.now();
-      const result = cameraCaptureLandmarker.detectForVideo(cameraCaptureInputCanvas, now);
-      cameraCaptureLatestResult = result;
-      drawCameraCaptureOverlay(result);
+      const poseResult = cameraCapturePoseLandmarker.detectForVideo(video, now);
+      const handResult = cameraCaptureHandLandmarker.detectForVideo(video, now);
+      const faceResult = cameraCaptureFaceLandmarker.detectForVideo(video, now);
+
+      cameraCaptureLatestResult = buildCameraCaptureResult(poseResult, handResult, faceResult);
+      drawCameraCaptureOverlay(cameraCaptureLatestResult);
+
+      const poseCount = cameraCaptureLatestResult.poseLandmarks?.[0]?.length || 0;
+      const handCount = cameraCaptureLatestResult.handLandmarks?.length || 0;
+      const faceCount = cameraCaptureLatestResult.faceLandmarks?.[0]?.length || 0;
+      updateCameraCaptureStatus(
+        `Tracking pose · face · hands${poseCount ? ` · pose ${poseCount}` : ""}${handCount ? ` · hands ${handCount}` : ""}${faceCount ? ` · face ${faceCount}` : ""}`,
+      );
       if (!state.cameraCaptureReady) {
         state.cameraCaptureReady = true;
       }
-      updateCameraCaptureStatus(
-        result?.poseLandmarks?.[0]?.length
-          ? `Tracking pose · ${result.poseLandmarks[0].length} landmarks`
-          : "Tracking pose",
-      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       updateCameraCaptureStatus("Camera tracking error", message);
@@ -1243,6 +1347,8 @@ async function startCameraCaptureSession() {
   state.cameraCaptureOpen = true;
   state.cameraCaptureActive = false;
   state.cameraCaptureReady = false;
+  cameraCapturePoseFrameCount = 0;
+  cameraCaptureLastDebugSignature = "";
   updateCameraCaptureStatus("Starting camera...", "");
   render();
 
@@ -1263,12 +1369,18 @@ async function startCameraCaptureSession() {
     cameraCaptureVideo = refs.cameraCaptureVideo;
     cameraCaptureOverlay = refs.cameraCaptureOverlay;
     cameraCaptureContext = cameraCaptureOverlay?.getContext?.("2d") ?? null;
-    cameraCaptureInputCanvas = document.createElement("canvas");
-    cameraCaptureInputContext = cameraCaptureInputCanvas.getContext("2d");
-    cameraCaptureLandmarker = await ensureCameraCaptureLandmarker();
+    await ensureCameraCaptureLandmarkers();
     state.cameraCaptureActive = true;
     state.cameraCaptureHint = "Move into frame, then press Capture Motion.";
     updateCameraCaptureStatus("Camera ready · tracking pose", "");
+    debugCameraCapture("camera session started", {
+      mode: "Pose / Hand / Face",
+      videoSize: {
+        width: refs.cameraCaptureVideo?.videoWidth || 0,
+        height: refs.cameraCaptureVideo?.videoHeight || 0,
+      },
+      ready: Boolean(cameraCapturePoseLandmarker && cameraCaptureHandLandmarker && cameraCaptureFaceLandmarker),
+    });
     await startCameraCaptureLoop(++cameraCaptureSessionId);
     render();
     return true;
@@ -1307,6 +1419,9 @@ function stopCameraCaptureSession() {
   cameraCaptureLatestResult = null;
   cameraCaptureInputCanvas = null;
   cameraCaptureInputContext = null;
+  cameraCapturePoseLandmarker = null;
+  cameraCaptureHandLandmarker = null;
+  cameraCaptureFaceLandmarker = null;
   state.cameraCaptureActive = false;
   updateCameraCaptureStatus(state.cameraCaptureOpen ? "Camera stopped." : "Camera idle.", "");
   drawCameraCaptureOverlay(null);
@@ -1339,7 +1454,7 @@ async function captureCameraMotion() {
 
   clone.cameraCapture = cloneCameraCapture({
     provider: "mediapipe",
-    mode: "pose",
+    mode: "pose-hand-face",
     capturedAt: new Date().toISOString(),
     frameSize: cameraCaptureVideo
       ? [cameraCaptureVideo.videoWidth || 0, cameraCaptureVideo.videoHeight || 0]
@@ -1347,6 +1462,11 @@ async function captureCameraMotion() {
     score: cameraCaptureLatestResult?.poseLandmarks?.[0]?.length ? 1 : 0,
     poseLandmarks: cameraCaptureLatestResult.poseLandmarks[0],
     poseWorldLandmarks: cameraCaptureLatestResult.poseWorldLandmarks?.[0] ?? [],
+    handLandmarks: cameraCaptureLatestResult.handLandmarks ?? [],
+    handWorldLandmarks: cameraCaptureLatestResult.handWorldLandmarks ?? [],
+    handedness: cameraCaptureLatestResult.handedness ?? [],
+    faceLandmarks: cameraCaptureLatestResult.faceLandmarks ?? [],
+    faceBlendshapes: cameraCaptureLatestResult.faceBlendshapes ?? [],
   });
 
   motions = [...motions, clone];
@@ -1723,7 +1843,32 @@ function renderMotionList() {
     return;
   }
 
-  for (const motion of filtered) {
+  const normalMotions = filtered.filter((motion) => !motion.createdViaCamera);
+  const cameraMotions = filtered.filter((motion) => motion.createdViaCamera);
+
+  const appendSection = (title, subtitle, list, emptyMessage) => {
+    const section = document.createElement("section");
+    section.className = "motion-section";
+    section.innerHTML = `
+      <div class="motion-section-header">
+        <span>${title}</span>
+        <span>${subtitle}</span>
+      </div>
+    `;
+    if (list.length) {
+      for (const motion of list) {
+        section.appendChild(buildMotionCard(motion));
+      }
+    } else {
+      const empty = document.createElement("div");
+      empty.className = "motion-card";
+      empty.innerHTML = `<div class="motion-subtitle">${emptyMessage}</div>`;
+      section.appendChild(empty);
+    }
+    refs.motionList.appendChild(section);
+  };
+
+  function buildMotionCard(motion) {
     const card = document.createElement("article");
     card.className = `motion-card${motion.id === state.selectedId ? " active" : ""}`;
     card.tabIndex = 0;
@@ -1784,7 +1929,15 @@ function renderMotionList() {
       state.saveStatus = `Downloaded ${motion.displayName}.vrma`;
       render();
     });
-    refs.motionList.appendChild(card);
+    return card;
+  }
+
+  if (normalMotions.length) {
+    appendSection("Standard motions", `${normalMotions.length} items`, normalMotions, "標準モーションはありません。");
+  }
+
+  if (cameraMotions.length) {
+    appendSection("Captured motions", `${cameraMotions.length} items`, cameraMotions, "カメラ生成モーションはありません。");
   }
 }
 
@@ -1878,8 +2031,14 @@ function renderDetails() {
     const worldCount = Array.isArray(motion.cameraCapture?.poseWorldLandmarks)
       ? motion.cameraCapture.poseWorldLandmarks.length
       : 0;
+    const handCount = Array.isArray(motion.cameraCapture?.handLandmarks)
+      ? motion.cameraCapture.handLandmarks.length
+      : 0;
+    const faceCount = Array.isArray(motion.cameraCapture?.faceLandmarks)
+      ? motion.cameraCapture.faceLandmarks.length
+      : 0;
     refs.cameraCaptureDetail.textContent = motion.cameraCapture
-      ? `Captured at ${motion.cameraCapture.capturedAt || "unknown time"} · pose landmarks ${poseCount} · world landmarks ${worldCount}`
+      ? `Captured at ${motion.cameraCapture.capturedAt || "unknown time"} · pose ${poseCount} · world ${worldCount} · hands ${handCount} · face ${faceCount}`
       : "No camera capture data stored on this motion yet.";
   }
   populateBoneControls();
@@ -1929,6 +2088,7 @@ function initializePreviewSplitWidth() {
 function updateBonePreviewVisibility() {
   const panel = refs.bonePreviewPanel;
   const toggle = refs.bonePreviewToggleButton;
+  const swapToggle = refs.bonePreviewCaptureSwapButton;
   const split = refs.previewSplit;
   const divider = refs.previewDivider;
 
@@ -1941,6 +2101,10 @@ function updateBonePreviewVisibility() {
   divider?.classList.toggle("is-hidden", !state.showBonePreview);
   toggle.classList.toggle("active", state.showBonePreview);
   toggle.textContent = state.showBonePreview ? "Bone Preview On" : "Bone Preview Off";
+  if (swapToggle) {
+    swapToggle.classList.toggle("active", state.bonePreviewCaptureSwap);
+    swapToggle.textContent = state.bonePreviewCaptureSwap ? "Capture Swap On" : "Capture Swap Off";
+  }
 }
 
 function updateCameraCaptureVisibility() {
@@ -1953,7 +2117,7 @@ function updateCameraCaptureVisibility() {
 
   panel.classList.toggle("is-collapsed", !state.cameraCaptureOpen);
   toggle.classList.toggle("active", state.cameraCaptureOpen);
-  toggle.textContent = state.cameraCaptureOpen ? "Camera Capture · Open" : "Camera Capture · Closed";
+  toggle.textContent = state.cameraCaptureOpen ? "Camera Capture · Open" : "Camera Capture(工事中) · Closed";
 
   if (refs.cameraCaptureNameInput && document.activeElement !== refs.cameraCaptureNameInput) {
     refs.cameraCaptureNameInput.value = state.cameraCaptureName || "";
@@ -1976,8 +2140,11 @@ function updateCameraCaptureVisibility() {
   }
 
   if (refs.cameraCaptureOverlayBadge) {
-    refs.cameraCaptureOverlayBadge.textContent = cameraCaptureLatestResult?.poseLandmarks?.[0]?.length
-      ? `Tracked ${cameraCaptureLatestResult.poseLandmarks[0].length} landmarks`
+    const poseCount = cameraCaptureLatestResult?.poseLandmarks?.[0]?.length || 0;
+    const handCount = cameraCaptureLatestResult?.handLandmarks?.length || 0;
+    const faceCount = cameraCaptureLatestResult?.faceLandmarks?.[0]?.length || 0;
+    refs.cameraCaptureOverlayBadge.textContent = poseCount
+      ? `Pose ${poseCount}${handCount ? ` · Hands ${handCount}` : ""}${faceCount ? ` · Face ${faceCount}` : ""}`
       : state.cameraCaptureActive
         ? "Tracking..."
         : "Camera idle";
@@ -2108,6 +2275,7 @@ function renderPreviewFrame() {
   );
 
   if (shouldUseLiveCameraPose) {
+    stopVrmaPreviewActions();
     applyCameraCapturePose(cameraCaptureLatestResult);
   } else if (motion && isVrmaSource(motion.source)) {
     const runtime = vrmaMotionRuntimeCache.get(motion.source);
@@ -2121,7 +2289,7 @@ function renderPreviewFrame() {
   } else {
     applyMotionPose(motion, progress, state.playbackTime);
   }
-  vrmPreviewVrm?.update?.(state.isPlaying ? deltaSeconds : 0);
+  vrmPreviewVrm?.update?.(deltaSeconds);
   updateSeekStatus(motion);
   if (refs.vrmaRuntimeSummary) {
     refs.vrmaRuntimeSummary.textContent = getVrmaRuntimeSummary(motion);
@@ -2208,6 +2376,16 @@ function setupBonePreview() {
   );
   bonePreviewRoot.add(bonePreviewLine);
 
+  bonePreviewCaptureLine = new THREE.Line(
+    new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({
+      color: 0x6cc1ff,
+      transparent: true,
+      opacity: 0.82,
+    }),
+  );
+  bonePreviewRoot.add(bonePreviewCaptureLine);
+
 }
 
 function resizeBonePreviewRenderer() {
@@ -2237,13 +2415,28 @@ function renderBonePreviewFrame() {
   }
 
   resizeBonePreviewRenderer();
+  const captureResult = state.cameraCaptureActive && cameraCaptureLatestResult?.poseLandmarks?.[0]?.length
+    ? cameraCaptureLatestResult
+    : null;
+  const captureSkeleton = captureResult ? buildCameraCaptureMajorSkeleton(captureResult) : null;
+  const captureIsPrimary = Boolean(state.bonePreviewCaptureSwap && captureSkeleton);
 
   if (!vrmPreviewBoneOptions.length) {
     if (refs.bonePreviewNote) {
       refs.bonePreviewNote.textContent = "No bone data.";
     }
     bonePreviewLine.visible = false;
+    bonePreviewCaptureLine?.geometry?.dispose?.();
+    if (bonePreviewCaptureLine) {
+      bonePreviewCaptureLine.visible = false;
+    }
+    if (bonePreviewLabelLayer) {
+      bonePreviewLabelLayer.innerHTML = "";
+    }
     for (const dot of bonePreviewDots) {
+      dot.visible = false;
+    }
+    for (const dot of bonePreviewCaptureDots) {
       dot.visible = false;
     }
     bonePreviewRenderer.render(bonePreviewScene, bonePreviewCamera);
@@ -2293,6 +2486,9 @@ function renderBonePreviewFrame() {
 
   const rootPoint = new THREE.Vector3();
   vrmPreviewModelRoot?.getWorldPosition(rootPoint);
+  const hierarchyBaseColor = captureIsPrimary ? 0x6cc1ff : 0xffca6c;
+  const hierarchyChainColor = captureIsPrimary ? 0x8fd3ff : 0x6cc1ff;
+  const hierarchySelectedColor = captureIsPrimary ? 0xffca6c : 0x7cf0b7;
 
   for (const entry of vrmPreviewBoneOptions) {
     const node = entry.node;
@@ -2315,6 +2511,58 @@ function renderBonePreviewFrame() {
   bonePreviewLine.geometry = new THREE.BufferGeometry();
   bonePreviewLine.geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   bonePreviewLine.visible = positions.length >= 6;
+  const captureAlignment = captureResult
+    ? createCameraCaptureAlignment(captureResult)
+    : null;
+  const captureRawPoints = captureSkeleton
+    ? captureSkeleton.nodes.map((entry) => entry.point.clone())
+    : [];
+  const captureAlignedPoints = captureAlignment
+    ? captureAlignment.skeleton.nodes.map((entry) => entry.point.clone().applyMatrix4(captureAlignment.transform))
+      .map((point) => point.sub(center).multiplyScalar(scale * zoom))
+    : null;
+  const capturePreviewPoints = (captureAlignedPoints && captureAlignedPoints.length)
+    ? captureAlignedPoints
+    : captureRawPoints.length
+      ? (() => {
+      const captureCenter = new THREE.Vector3();
+      for (const point of captureRawPoints) {
+        captureCenter.add(point);
+      }
+      captureCenter.multiplyScalar(1 / captureRawPoints.length);
+      let captureMaxDistance = 0.0001;
+      const normalizedCapturePoints = captureRawPoints.map((point) => point.clone().sub(captureCenter));
+      for (const point of normalizedCapturePoints) {
+        captureMaxDistance = Math.max(captureMaxDistance, point.length());
+      }
+      const captureScale = 1.45 / captureMaxDistance;
+      return normalizedCapturePoints.map((point) => point.multiplyScalar(captureScale * zoom));
+    })()
+      : [];
+
+  const capturePositions = [];
+  if (captureSkeleton) {
+    for (const [startKey, endKey] of captureSkeleton.connections) {
+      const startIndex = captureSkeleton.nodes.findIndex((entry) => entry.key === startKey);
+      const endIndex = captureSkeleton.nodes.findIndex((entry) => entry.key === endKey);
+      const start = startIndex >= 0 ? capturePreviewPoints[startIndex] : null;
+      const end = endIndex >= 0 ? capturePreviewPoints[endIndex] : null;
+      if (!start || !end) {
+        continue;
+      }
+      capturePositions.push(start.x, start.y, start.z);
+      capturePositions.push(end.x, end.y, end.z);
+    }
+  }
+
+  if (bonePreviewCaptureLine) {
+    if (bonePreviewCaptureLine.geometry) {
+      bonePreviewCaptureLine.geometry.dispose?.();
+    }
+    bonePreviewCaptureLine.geometry = new THREE.BufferGeometry();
+    bonePreviewCaptureLine.geometry.setAttribute("position", new THREE.Float32BufferAttribute(capturePositions, 3));
+    bonePreviewCaptureLine.visible = capturePositions.length >= 6;
+  }
 
   while (bonePreviewDots.length < nodes.length) {
     const dot = new THREE.Mesh(
@@ -2322,6 +2570,15 @@ function renderBonePreviewFrame() {
       new THREE.MeshBasicMaterial({ color: 0xffca6c }),
     );
     bonePreviewDots.push(dot);
+    bonePreviewRoot.add(dot);
+  }
+
+  while (bonePreviewCaptureDots.length < capturePreviewPoints.length) {
+    const dot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.045, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0x6cc1ff, transparent: true, opacity: 0.88 }),
+    );
+    bonePreviewCaptureDots.push(dot);
     bonePreviewRoot.add(dot);
   }
 
@@ -2340,14 +2597,45 @@ function renderBonePreviewFrame() {
       };
       bonePreviewNodeToDot.set(node.uuid, dot);
       if (selectedNode && node.uuid === selectedNode.uuid) {
-        dot.material.color.set(0x7cf0b7);
+        dot.material.color.set(hierarchySelectedColor);
         dot.scale.setScalar(1.4);
       } else if (selectedChain.has(node.uuid)) {
-        dot.material.color.set(0x6cc1ff);
+        dot.material.color.set(hierarchyChainColor);
         dot.scale.setScalar(1.15);
       } else {
-        dot.material.color.set(0xffca6c);
+        dot.material.color.set(hierarchyBaseColor);
         dot.scale.setScalar(1.0);
+      }
+    } else {
+      dot.visible = false;
+      dot.userData = null;
+    }
+  }
+
+  bonePreviewCaptureNodeToDot = new Map();
+  const captureBaseColor = captureIsPrimary ? 0xffca6c : 0x6cc1ff;
+  const captureHeadColor = captureIsPrimary ? 0xffe3a1 : 0x8fd3ff;
+  for (let index = 0; index < bonePreviewCaptureDots.length; index += 1) {
+    const dot = bonePreviewCaptureDots[index];
+    if (index < capturePreviewPoints.length) {
+      const point = capturePreviewPoints[index];
+      dot.visible = true;
+      dot.position.set(point.x, point.y, point.z);
+      const captureNode = captureSkeleton?.nodes[index] ?? null;
+      dot.userData = {
+        captureIndex: index,
+        captureKey: captureNode?.key ?? "",
+      };
+      bonePreviewCaptureNodeToDot.set(index, dot);
+      if (captureNode?.key === "hips") {
+        dot.scale.setScalar(1.35);
+        dot.material.color.set(captureHeadColor);
+      } else if (captureNode?.key === "chest" || captureNode?.key === "head") {
+        dot.scale.setScalar(1.15);
+        dot.material.color.set(captureHeadColor);
+      } else {
+        dot.scale.setScalar(1.0);
+        dot.material.color.set(captureBaseColor);
       }
     } else {
       dot.visible = false;
@@ -2358,10 +2646,39 @@ function renderBonePreviewFrame() {
   bonePreviewCamera.position.set(0, 0.3, 4.5 / zoom);
   bonePreviewCamera.lookAt(0, 0, 0);
 
+  if (bonePreviewLabelLayer) {
+    bonePreviewLabelLayer.innerHTML = "";
+    if (captureSkeleton) {
+      const rect = bonePreviewCanvas.getBoundingClientRect();
+      for (let index = 0; index < capturePreviewPoints.length; index += 1) {
+        const captureNode = captureSkeleton.nodes[index];
+        const point = capturePreviewPoints[index];
+        if (!captureNode || !point) {
+          continue;
+        }
+
+        const projected = point.clone().project(bonePreviewCamera);
+        if (projected.z < -1 || projected.z > 1) {
+          continue;
+        }
+
+        const label = document.createElement("div");
+        label.className = `bone-preview-label${captureIsPrimary ? " is-main" : ""}`;
+        label.textContent = formatBonePreviewLabel(captureNode.key);
+        label.style.display = "block";
+        label.style.left = `${((projected.x + 1) * 0.5) * rect.width}px`;
+        label.style.top = `${(((-projected.y) + 1) * 0.5) * rect.height}px`;
+        bonePreviewLabelLayer.appendChild(label);
+      }
+    }
+  }
+
   if (refs.bonePreviewNote) {
-    refs.bonePreviewNote.textContent = state.isPaused && state.selectedBoneKey
-      ? `${nodes.length} bones in hierarchy · paused · axis ${normalizeBonePreviewAxis(state.bonePreviewAxis).toUpperCase()} · drag selected bone`
-      : `${nodes.length} bones in hierarchy · wheel to zoom`;
+    refs.bonePreviewNote.textContent = captureResult
+      ? `${nodes.length} bones in hierarchy · live camera major skeleton overlay${captureIsPrimary ? " · capture swap on" : ""} · axis ${normalizeBonePreviewAxis(state.bonePreviewAxis).toUpperCase()}`
+      : state.isPaused && state.selectedBoneKey
+        ? `${nodes.length} bones in hierarchy · paused · axis ${normalizeBonePreviewAxis(state.bonePreviewAxis).toUpperCase()} · drag selected bone`
+        : `${nodes.length} bones in hierarchy · wheel to zoom`;
   }
 
   bonePreviewRenderer.render(bonePreviewScene, bonePreviewCamera);
@@ -2647,17 +2964,16 @@ function restorePreviewRestPose() {
 }
 
 function getCameraCaptureLandmarkSet(result) {
-  if (Array.isArray(result?.poseWorldLandmarks) && result.poseWorldLandmarks[0]?.length) {
-    return result.poseWorldLandmarks[0];
-  }
   if (Array.isArray(result?.poseLandmarks) && result.poseLandmarks[0]?.length) {
     return result.poseLandmarks[0];
+  }
+  if (Array.isArray(result?.poseWorldLandmarks) && result.poseWorldLandmarks[0]?.length) {
+    return result.poseWorldLandmarks[0];
   }
   return [];
 }
 
-function getCameraCapturePoint(result, index) {
-  const landmark = getCameraCaptureLandmarkSet(result)[index];
+function convertCameraLandmark(landmark) {
   if (!landmark) {
     return null;
   }
@@ -2665,11 +2981,19 @@ function getCameraCapturePoint(result, index) {
   const x = Number(landmark.x);
   const y = Number(landmark.y);
   const z = Number(landmark.z);
-  return new THREE.Vector3(
-    Number.isFinite(x) ? x : 0,
-    Number.isFinite(y) ? y : 0,
-    Number.isFinite(z) ? z : 0,
-  );
+  if (![x, y, z].every(Number.isFinite)) {
+    return null;
+  }
+
+  // MediaPipe depth grows away from the camera, while Three.js uses -Z as
+  // the forward direction in the preview. Flip depth at the shared boundary
+  // so position targets and bone directions use one handed coordinate system.
+  return new THREE.Vector3(x * 2 - 1, -(y * 2 - 1), -z);
+}
+
+function getCameraCapturePoint(result, index) {
+  const landmark = getCameraCaptureLandmarkSet(result)[index];
+  return convertCameraLandmark(landmark);
 }
 
 function getCameraCaptureMidpoint(result, a, b) {
@@ -2682,9 +3006,197 @@ function getCameraCaptureMidpoint(result, a, b) {
   return first.clone().add(second).multiplyScalar(0.5);
 }
 
+function buildCameraCaptureMajorSkeleton(result) {
+  if (!result?.poseLandmarks?.[0]?.length && !result?.poseWorldLandmarks?.[0]?.length) {
+    return null;
+  }
+
+  const hips = getCameraCaptureMidpoint(result, 23, 24);
+  const leftShoulder = getCameraCapturePoint(result, 11);
+  const rightShoulder = getCameraCapturePoint(result, 12);
+  const leftElbow = getCameraCapturePoint(result, 13);
+  const rightElbow = getCameraCapturePoint(result, 14);
+  const leftWrist = getCameraCapturePoint(result, 15);
+  const rightWrist = getCameraCapturePoint(result, 16);
+  const nose = getCameraCapturePoint(result, 0);
+
+  const shoulderCenter = leftShoulder && rightShoulder
+    ? leftShoulder.clone().add(rightShoulder).multiplyScalar(0.5)
+    : null;
+  const chest = hips && shoulderCenter
+    ? hips.clone().add(shoulderCenter).multiplyScalar(0.5)
+    : shoulderCenter;
+  const neck = chest && nose
+    ? chest.clone().add(nose).multiplyScalar(0.5)
+    : chest;
+  const head = nose ?? neck;
+
+  const nodes = [
+    { key: "hips", point: hips },
+    { key: "chest", point: chest },
+    { key: "neck", point: neck },
+    { key: "head", point: head },
+    { key: "leftShoulder", point: leftShoulder },
+    { key: "leftArm", point: leftElbow },
+    { key: "leftForeArm", point: leftWrist },
+    { key: "leftHand", point: leftWrist },
+    { key: "rightShoulder", point: rightShoulder },
+    { key: "rightArm", point: rightElbow },
+    { key: "rightForeArm", point: rightWrist },
+    { key: "rightHand", point: rightWrist },
+  ].filter((entry) => entry.point);
+
+  if (!nodes.length) {
+    return null;
+  }
+
+  return {
+    nodes,
+    connections: [
+      ["hips", "chest"],
+      ["chest", "neck"],
+      ["neck", "head"],
+      ["chest", "leftShoulder"],
+      ["leftShoulder", "leftArm"],
+      ["leftArm", "leftForeArm"],
+      ["chest", "rightShoulder"],
+      ["rightShoulder", "rightArm"],
+      ["rightArm", "rightForeArm"],
+    ],
+  };
+}
+
+function getSkeletonNodePoint(skeleton, key) {
+  if (!skeleton?.nodes?.length) {
+    return null;
+  }
+
+  return skeleton.nodes.find((entry) => entry.key === key)?.point?.clone() ?? null;
+}
+
+function getPreviewPointByKey(nodeToPoint, key) {
+  const node = resolveMotionSlotNode(key);
+  if (!node?.uuid || !nodeToPoint?.has(node.uuid)) {
+    return null;
+  }
+  return nodeToPoint.get(node.uuid)?.clone?.() ?? null;
+}
+
+function getPreviewWorldPointByKey(key) {
+  const node = resolveMotionSlotNode(key);
+  if (!node) {
+    return null;
+  }
+
+  const point = new THREE.Vector3();
+  node.getWorldPosition(point);
+  return point;
+}
+
+function createCameraCaptureAlignment(result) {
+  const captureSkeleton = buildCameraCaptureMajorSkeleton(result);
+  if (!captureSkeleton) {
+    return null;
+  }
+
+  const sourceLeftShoulder = getSkeletonNodePoint(captureSkeleton, "leftShoulder");
+  const sourceRightShoulder = getSkeletonNodePoint(captureSkeleton, "rightShoulder");
+  const sourceHips = getSkeletonNodePoint(captureSkeleton, "hips");
+  const sourceChest = getSkeletonNodePoint(captureSkeleton, "chest") ?? getSkeletonNodePoint(captureSkeleton, "neck");
+  const sourceHead = getSkeletonNodePoint(captureSkeleton, "head");
+
+  const targetLeftShoulder = getPreviewWorldPointByKey("leftShoulder");
+  const targetRightShoulder = getPreviewWorldPointByKey("rightShoulder");
+  const targetHips = getPreviewWorldPointByKey("hips");
+  const targetChest = getPreviewWorldPointByKey("chest") ?? getPreviewWorldPointByKey("neck");
+  const targetHead = getPreviewWorldPointByKey("head");
+
+  const sourcePoints = [sourceLeftShoulder, sourceRightShoulder, sourceHips, sourceChest, sourceHead].filter(Boolean);
+  const targetPoints = [targetLeftShoulder, targetRightShoulder, targetHips, targetChest, targetHead].filter(Boolean);
+  if (sourcePoints.length < 3 || targetPoints.length < 3) {
+    return null;
+  }
+
+  const sourceOrigin = sourceHips ?? sourceChest ?? sourceHead ?? sourcePoints[0];
+  const targetOrigin = targetHips ?? targetChest ?? targetHead ?? targetPoints[0];
+  if (!sourceOrigin || !targetOrigin) {
+    return null;
+  }
+
+  const sourceX = sourceRightShoulder && sourceLeftShoulder
+    ? sourceRightShoulder.clone().sub(sourceLeftShoulder)
+    : null;
+  const sourceY = sourceChest
+    ? sourceChest.clone().sub(sourceOrigin)
+    : sourceHead
+      ? sourceHead.clone().sub(sourceOrigin)
+      : null;
+  const targetX = targetRightShoulder && targetLeftShoulder
+    ? targetRightShoulder.clone().sub(targetLeftShoulder)
+    : null;
+  const targetY = targetChest
+    ? targetChest.clone().sub(targetOrigin)
+    : targetHead
+      ? targetHead.clone().sub(targetOrigin)
+      : null;
+
+  if (!sourceX || !sourceY || !targetX || !targetY) {
+    return null;
+  }
+
+  const sourceXLen = sourceX.length();
+  const targetXLen = targetX.length();
+  const sourceYLen = sourceY.length();
+  const targetYLen = targetY.length();
+  if (sourceXLen < 1e-6 || targetXLen < 1e-6 || sourceYLen < 1e-6 || targetYLen < 1e-6) {
+    return null;
+  }
+
+  const sourceXDir = sourceX.clone().normalize();
+  const targetXDir = targetX.clone().normalize();
+  const sourceYProj = sourceY.clone().sub(sourceXDir.clone().multiplyScalar(sourceY.dot(sourceXDir)));
+  const targetYProj = targetY.clone().sub(targetXDir.clone().multiplyScalar(targetY.dot(targetXDir)));
+  if (sourceYProj.lengthSq() < 1e-8 || targetYProj.lengthSq() < 1e-8) {
+    return null;
+  }
+
+  const sourceYDir = sourceYProj.normalize();
+  const targetYDir = targetYProj.normalize();
+  const sourceZDir = new THREE.Vector3().crossVectors(sourceXDir, sourceYDir).normalize();
+  const targetZDir = new THREE.Vector3().crossVectors(targetXDir, targetYDir).normalize();
+  if (sourceZDir.lengthSq() < 1e-8 || targetZDir.lengthSq() < 1e-8) {
+    return null;
+  }
+
+  const sourceScale = (sourceXLen + sourceYLen) / 2;
+  const targetScale = (targetXLen + targetYLen) / 2;
+  if (!Number.isFinite(sourceScale) || !Number.isFinite(targetScale) || sourceScale < 1e-6 || targetScale < 1e-6) {
+    return null;
+  }
+
+  const sourceBasis = new THREE.Matrix4().makeBasis(
+    sourceXDir.multiplyScalar(sourceScale),
+    sourceYDir.multiplyScalar(sourceScale),
+    sourceZDir.multiplyScalar(sourceScale),
+  );
+  sourceBasis.setPosition(sourceOrigin);
+
+  const targetBasis = new THREE.Matrix4().makeBasis(
+    targetXDir.multiplyScalar(targetScale),
+    targetYDir.multiplyScalar(targetScale),
+    targetZDir.multiplyScalar(targetScale),
+  );
+  targetBasis.setPosition(targetOrigin);
+
+  const transform = new THREE.Matrix4()
+    .multiplyMatrices(targetBasis, sourceBasis.clone().invert());
+
+  return { skeleton: captureSkeleton, transform };
+}
+
 function applyLimbRotationFromPoints(node, startPoint, endPoint, options = {}) {
   if (!node || !startPoint || !endPoint) {
-    return;
+    return false;
   }
 
   const rest = vrmPreviewRestPose.get(node.uuid)?.rotation ?? {
@@ -2694,7 +3206,7 @@ function applyLimbRotationFromPoints(node, startPoint, endPoint, options = {}) {
   };
   const direction = endPoint.clone().sub(startPoint);
   if (direction.lengthSq() < 1e-8) {
-    return;
+    return false;
   }
 
   direction.normalize();
@@ -2706,97 +3218,364 @@ function applyLimbRotationFromPoints(node, startPoint, endPoint, options = {}) {
   node.rotation.x = rest.x + THREE.MathUtils.clamp(xAngle, -1.2, 1.2) * (options.xScale ?? 0.75);
   node.rotation.y = rest.y + THREE.MathUtils.clamp(yAngle, -0.9, 0.9) * (options.yScale ?? 0.35);
   node.rotation.z = rest.z + THREE.MathUtils.clamp(zAngle, -1.8, 1.8) * (options.zScale ?? 0.85);
+  return true;
 }
 
-function applyCameraCapturePose(result) {
-  if (!result) {
+const CAMERA_HUMANOID_BONES = {
+  hips: "hips",
+  spine: "spine",
+  chest: "chest",
+  neck: "neck",
+  head: "head",
+  leftShoulder: "leftShoulder",
+  rightShoulder: "rightShoulder",
+  leftArm: "leftUpperArm",
+  rightArm: "rightUpperArm",
+  leftForeArm: "leftLowerArm",
+  rightForeArm: "rightLowerArm",
+  leftHand: "leftHand",
+  rightHand: "rightHand",
+  leftUpLeg: "leftUpperLeg",
+  rightUpLeg: "rightUpperLeg",
+  leftLeg: "leftLowerLeg",
+  rightLeg: "rightLowerLeg",
+  leftFoot: "leftFoot",
+  rightFoot: "rightFoot",
+};
+
+function getCameraHumanoidNode(slot) {
+  const humanBone = CAMERA_HUMANOID_BONES[slot];
+  if (!humanBone || !vrmPreviewVrm?.humanoid?.getNormalizedBoneNode) {
+    return null;
+  }
+  return vrmPreviewVrm.humanoid.getNormalizedBoneNode(humanBone) ?? null;
+}
+
+function applyCameraBoneDirection(slot, start, end, axis, factor = 0.3) {
+  const node = getCameraHumanoidNode(slot);
+  if (!node || !start || !end) {
     return false;
   }
 
-  restorePreviewRestPose();
-
-  const hips = getCameraCaptureMidpoint(result, 23, 24);
-  const leftShoulder = getCameraCapturePoint(result, 11);
-  const rightShoulder = getCameraCapturePoint(result, 12);
-  const leftElbow = getCameraCapturePoint(result, 13);
-  const rightElbow = getCameraCapturePoint(result, 14);
-  const leftWrist = getCameraCapturePoint(result, 15);
-  const rightWrist = getCameraCapturePoint(result, 16);
-  const leftHip = getCameraCapturePoint(result, 23);
-  const rightHip = getCameraCapturePoint(result, 24);
-  const leftKnee = getCameraCapturePoint(result, 25);
-  const rightKnee = getCameraCapturePoint(result, 26);
-  const leftAnkle = getCameraCapturePoint(result, 27);
-  const rightAnkle = getCameraCapturePoint(result, 28);
-  const nose = getCameraCapturePoint(result, 0);
-
-  const hipsNode = resolveMotionSlotNode("hips");
-  const spineNode = resolveMotionSlotNode("spine");
-  const chestNode = resolveMotionSlotNode("chest");
-  const neckNode = resolveMotionSlotNode("neck");
-  const headNode = resolveMotionSlotNode("head");
-  const leftShoulderNode = resolveMotionSlotNode("leftShoulder");
-  const rightShoulderNode = resolveMotionSlotNode("rightShoulder");
-  const leftArmNode = resolveMotionSlotNode("leftArm");
-  const rightArmNode = resolveMotionSlotNode("rightArm");
-  const leftForeArmNode = resolveMotionSlotNode("leftForeArm");
-  const rightForeArmNode = resolveMotionSlotNode("rightForeArm");
-  const leftUpLegNode = resolveMotionSlotNode("leftUpLeg");
-  const rightUpLegNode = resolveMotionSlotNode("rightUpLeg");
-  const leftLegNode = resolveMotionSlotNode("leftLeg");
-  const rightLegNode = resolveMotionSlotNode("rightLeg");
-
-  if (hipsNode && leftHip && rightHip) {
-    const hipSpan = rightHip.clone().sub(leftHip);
-    const rest = vrmPreviewRestPose.get(hipsNode.uuid)?.rotation ?? hipsNode.rotation;
-    hipsNode.rotation.z = rest.z + THREE.MathUtils.clamp(Math.atan2(hipSpan.y, Math.max(0.001, hipSpan.x)), -0.8, 0.8) * 0.5;
+  const direction = end.clone().sub(start);
+  if (direction.lengthSq() < 1e-8) {
+    return false;
   }
 
-  if (spineNode && leftShoulder && rightShoulder && hips) {
-    const shoulderCenter = leftShoulder.clone().add(rightShoulder).multiplyScalar(0.5);
-    applyLimbRotationFromPoints(spineNode, hips, shoulderCenter, { xScale: 0.55, yScale: 0.2, zScale: 0.45 });
+  const parentWorldQuaternion = new THREE.Quaternion();
+  if (node.parent) {
+    node.parent.updateWorldMatrix(true, false);
+    node.parent.getWorldQuaternion(parentWorldQuaternion);
   }
 
-  if (chestNode && leftShoulder && rightShoulder) {
-    const shoulderCenter = leftShoulder.clone().add(rightShoulder).multiplyScalar(0.5);
-    const neckCenter = nose ? nose.clone() : shoulderCenter.clone();
-    applyLimbRotationFromPoints(chestNode, shoulderCenter, neckCenter, { xScale: 0.65, yScale: 0.25, zScale: 0.45 });
+  const rest = vrmPreviewRestPose.get(node.uuid);
+  const restLocalQuaternion = rest?.quaternion?.clone() ?? node.quaternion.clone();
+  const restWorldQuaternion = parentWorldQuaternion.clone().multiply(restLocalQuaternion);
+  const restDirection = new THREE.Vector3(...axis)
+    .normalize()
+    .applyQuaternion(restWorldQuaternion)
+    .normalize();
+  const desiredDirection = direction.normalize();
+  const delta = new THREE.Quaternion().setFromUnitVectors(restDirection, desiredDirection);
+  const desiredWorldQuaternion = delta.multiply(restWorldQuaternion);
+  const desiredLocalQuaternion = parentWorldQuaternion
+    .clone()
+    .invert()
+    .multiply(desiredWorldQuaternion);
+
+  node.quaternion.slerp(desiredLocalQuaternion, factor);
+  return true;
+}
+
+function aimCameraBoneAtWorldDirection(node, direction, axis, factor = 1) {
+  if (!node || !direction || direction.lengthSq() < 1e-8) {
+    return false;
   }
 
-  if (neckNode && nose && leftShoulder && rightShoulder) {
-    const shoulderCenter = leftShoulder.clone().add(rightShoulder).multiplyScalar(0.5);
-    applyLimbRotationFromPoints(neckNode, shoulderCenter, nose, { xScale: 0.45, yScale: 0.2, zScale: 0.35 });
+  const parentWorldQuaternion = new THREE.Quaternion();
+  if (node.parent) {
+    node.parent.updateWorldMatrix(true, false);
+    node.parent.getWorldQuaternion(parentWorldQuaternion);
   }
 
-  if (headNode && nose && leftShoulder && rightShoulder) {
-    const shoulderCenter = leftShoulder.clone().add(rightShoulder).multiplyScalar(0.5);
-    applyLimbRotationFromPoints(headNode, shoulderCenter, nose, { xScale: 0.4, yScale: 0.15, zScale: 0.3 });
+  node.updateWorldMatrix(true, false);
+  const currentWorldQuaternion = new THREE.Quaternion();
+  node.getWorldQuaternion(currentWorldQuaternion);
+  const currentAxis = new THREE.Vector3(...axis)
+    .normalize()
+    .applyQuaternion(currentWorldQuaternion)
+    .normalize();
+  const desiredDirection = direction.clone().normalize();
+  const delta = new THREE.Quaternion().setFromUnitVectors(currentAxis, desiredDirection);
+  const desiredWorldQuaternion = delta.multiply(currentWorldQuaternion);
+  const desiredLocalQuaternion = parentWorldQuaternion
+    .clone()
+    .invert()
+    .multiply(desiredWorldQuaternion);
+
+  node.quaternion.slerp(desiredLocalQuaternion, factor);
+  node.updateWorldMatrix(true, false);
+  return true;
+}
+
+function applyCameraArmIk(side, shoulderTarget, elbowTarget, wristTarget) {
+  if (!shoulderTarget || !elbowTarget || !wristTarget) {
+    return false;
   }
 
-  applyLimbRotationFromPoints(leftShoulderNode, leftShoulder, leftElbow, { mirror: true, xScale: 0.2, yScale: 0.15, zScale: 0.75 });
-  applyLimbRotationFromPoints(rightShoulderNode, rightShoulder, rightElbow, { mirror: false, xScale: 0.2, yScale: 0.15, zScale: 0.75 });
-  applyLimbRotationFromPoints(leftArmNode, leftShoulder, leftElbow, { mirror: true, xScale: 0.35, yScale: 0.2, zScale: 0.85 });
-  applyLimbRotationFromPoints(rightArmNode, rightShoulder, rightElbow, { mirror: false, xScale: 0.35, yScale: 0.2, zScale: 0.85 });
-  applyLimbRotationFromPoints(leftForeArmNode, leftElbow, leftWrist, { mirror: true, xScale: 0.4, yScale: 0.2, zScale: 0.9 });
-  applyLimbRotationFromPoints(rightForeArmNode, rightElbow, rightWrist, { mirror: false, xScale: 0.4, yScale: 0.2, zScale: 0.9 });
-  applyLimbRotationFromPoints(leftUpLegNode, leftHip, leftKnee, { mirror: true, xScale: 0.35, yScale: 0.18, zScale: 0.85 });
-  applyLimbRotationFromPoints(rightUpLegNode, rightHip, rightKnee, { mirror: false, xScale: 0.35, yScale: 0.18, zScale: 0.85 });
-  applyLimbRotationFromPoints(leftLegNode, leftKnee, leftAnkle, { mirror: true, xScale: 0.35, yScale: 0.18, zScale: 0.85 });
-  applyLimbRotationFromPoints(rightLegNode, rightKnee, rightAnkle, { mirror: false, xScale: 0.35, yScale: 0.18, zScale: 0.85 });
+  const upperArm = getCameraHumanoidNode(`${side}Arm`);
+  const foreArm = getCameraHumanoidNode(`${side}ForeArm`);
+  const hand = getCameraHumanoidNode(`${side}Hand`);
+  if (!upperArm || !foreArm || !hand) {
+    return false;
+  }
 
-  const selectedBone = state.selectedBoneKey
-    ? vrmPreviewBoneOptions.find((entry) => entry.key === state.selectedBoneKey)?.node ?? null
-    : null;
-  if (selectedBone && vrmPreviewBoneMarker) {
-    const worldPosition = new THREE.Vector3();
-    selectedBone.getWorldPosition(worldPosition);
-    vrmPreviewBoneMarker.visible = true;
-    vrmPreviewBoneMarker.position.copy(worldPosition);
-  } else if (vrmPreviewBoneMarker) {
-    vrmPreviewBoneMarker.visible = false;
+  upperArm.updateWorldMatrix(true, false);
+  foreArm.updateWorldMatrix(true, false);
+  hand.updateWorldMatrix(true, false);
+
+  const shoulder = new THREE.Vector3();
+  const elbow = new THREE.Vector3();
+  const handPosition = new THREE.Vector3();
+  upperArm.getWorldPosition(shoulder);
+  foreArm.getWorldPosition(elbow);
+  hand.getWorldPosition(handPosition);
+
+  const upperLength = Math.max(0.001, shoulder.distanceTo(elbow));
+  const foreLength = Math.max(0.001, elbow.distanceTo(handPosition));
+  const targetDirection = wristTarget.clone().sub(shoulder);
+  const distance = THREE.MathUtils.clamp(
+    targetDirection.length(),
+    Math.abs(upperLength - foreLength) + 0.0001,
+    upperLength + foreLength - 0.0001,
+  );
+  if (distance < 1e-6) {
+    return false;
+  }
+
+  const direction = targetDirection.normalize();
+  const poleOffset = elbowTarget.clone().sub(shoulder);
+  const poleProjection = direction.clone().multiplyScalar(poleOffset.dot(direction));
+  const poleDirection = poleOffset.sub(poleProjection);
+  if (poleDirection.lengthSq() < 1e-8) {
+    poleDirection.set(0, 1, 0).projectOnPlane(direction);
+  }
+  if (poleDirection.lengthSq() < 1e-8) {
+    poleDirection.set(0, 0, 1).projectOnPlane(direction);
+  }
+  poleDirection.normalize();
+
+  const along = (upperLength * upperLength - foreLength * foreLength + distance * distance) / (2 * distance);
+  const height = Math.sqrt(Math.max(0, upperLength * upperLength - along * along));
+  const solvedElbow = shoulder
+    .clone()
+    .add(direction.clone().multiplyScalar(along))
+    .add(poleDirection.multiplyScalar(height));
+  const axis = side === "left" ? [1, 0, 0] : [-1, 0, 0];
+
+  for (let iteration = 0; iteration < 3; iteration += 1) {
+    upperArm.updateWorldMatrix(true, false);
+    foreArm.updateWorldMatrix(true, false);
+    const currentShoulder = new THREE.Vector3();
+    const currentElbow = new THREE.Vector3();
+    upperArm.getWorldPosition(currentShoulder);
+    foreArm.getWorldPosition(currentElbow);
+    aimCameraBoneAtWorldDirection(upperArm, solvedElbow.clone().sub(currentShoulder), axis);
+    foreArm.updateWorldMatrix(true, false);
+    const updatedElbow = new THREE.Vector3();
+    foreArm.getWorldPosition(updatedElbow);
+    aimCameraBoneAtWorldDirection(foreArm, wristTarget.clone().sub(updatedElbow), axis);
   }
 
   return true;
+}
+
+function applyCameraNeck(slot, leftShoulder, rightShoulder, nose) {
+  const node = getCameraHumanoidNode(slot);
+  if (!node || !leftShoulder || !rightShoulder || !nose) {
+    return false;
+  }
+
+  const neckBase = leftShoulder.clone().add(rightShoulder).multiplyScalar(0.5);
+  const shoulderDirection = rightShoulder.clone().sub(leftShoulder).normalize();
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(getCameraHumanoidNode("chest")?.quaternion ?? new THREE.Quaternion());
+  const planeNormal = shoulderDirection.clone().cross(up).normalize();
+  const noseDirection = nose.clone().sub(neckBase).normalize();
+  const projected = noseDirection.clone().projectOnPlane(planeNormal);
+  if (projected.lengthSq() < 1e-8) {
+    return false;
+  }
+
+  const target = new THREE.Quaternion().setFromUnitVectors(up, projected.normalize());
+  node.quaternion.slerp(target, 0.1);
+  return true;
+}
+
+function getAlignedCameraPoint(landmark, alignment) {
+  const point = convertCameraLandmark(landmark);
+  return point && alignment ? point.applyMatrix4(alignment.transform) : point;
+}
+
+function applyCameraHandOrientation(slot, landmarks, alignment, side, factor = 0.55) {
+  const node = getCameraHumanoidNode(slot);
+  if (!node || !landmarks?.[0] || !landmarks?.[5] || !landmarks?.[9] || !landmarks?.[17]) {
+    return false;
+  }
+
+  const wrist = getAlignedCameraPoint(landmarks[0], alignment);
+  const index = getAlignedCameraPoint(landmarks[5], alignment);
+  const middle = getAlignedCameraPoint(landmarks[9], alignment);
+  const pinky = getAlignedCameraPoint(landmarks[17], alignment);
+  if (!wrist || !index || !middle || !pinky) {
+    return false;
+  }
+
+  const forward = middle.clone().sub(wrist).normalize();
+  const lateral = pinky.clone().sub(index).normalize();
+  if (forward.lengthSq() < 1e-8 || lateral.lengthSq() < 1e-8) {
+    return false;
+  }
+
+  const palmNormal = forward.clone().cross(lateral).normalize();
+  const correctedLateral = palmNormal.clone().cross(forward).normalize();
+  const targetBasis = new THREE.Matrix4().makeBasis(
+    correctedLateral,
+    palmNormal,
+    forward,
+  );
+  const targetWorldQuaternion = new THREE.Quaternion().setFromRotationMatrix(targetBasis);
+
+  const parentWorldQuaternion = new THREE.Quaternion();
+  if (node.parent) {
+    node.parent.updateWorldMatrix(true, false);
+    node.parent.getWorldQuaternion(parentWorldQuaternion);
+  }
+
+  const rest = vrmPreviewRestPose.get(node.uuid);
+  const restLocalQuaternion = rest?.quaternion?.clone() ?? node.quaternion.clone();
+  const restWorldQuaternion = parentWorldQuaternion.clone().multiply(restLocalQuaternion);
+  const desiredWorldQuaternion = targetWorldQuaternion;
+  const desiredLocalQuaternion = parentWorldQuaternion
+    .clone()
+    .invert()
+    .multiply(desiredWorldQuaternion);
+
+  node.quaternion.slerp(desiredLocalQuaternion, factor);
+  return true;
+}
+
+function applyCameraFinger(slot, landmarks, a, b, c, alignment, factor = 0.8) {
+  const node = getCameraHumanoidNode(slot);
+  if (!node || !landmarks?.[a] || !landmarks?.[b] || !landmarks?.[c]) {
+    return false;
+  }
+
+  const first = getAlignedCameraPoint(landmarks[a], alignment);
+  const second = getAlignedCameraPoint(landmarks[b], alignment);
+  const third = getAlignedCameraPoint(landmarks[c], alignment);
+  if (!first || !second || !third) {
+    return false;
+  }
+
+  const firstDirection = third.clone().sub(second).normalize();
+  const secondDirection = second.clone().sub(first).normalize();
+  const target = new THREE.Quaternion().setFromUnitVectors(firstDirection, secondDirection);
+  node.quaternion.slerp(target, factor);
+  return true;
+}
+
+function applyCameraFace(result) {
+  const expressionManager = vrmPreviewVrm?.expressionManager;
+  const face = result?.faceLandmarks?.[0];
+  if (!expressionManager || !face?.length) {
+    return 0;
+  }
+
+  const distance = (a, b) => {
+    if (!face[a] || !face[b]) return 0;
+    return Math.hypot(face[a].x - face[b].x, face[a].y - face[b].y, face[a].z - face[b].z);
+  };
+  const mouth = THREE.MathUtils.clamp(distance(13, 14) / 0.05, 0, 1);
+  const leftEye = THREE.MathUtils.clamp(1 - (distance(159, 145) * 2 / Math.max(distance(33, 133), 1e-5)), 0, 1);
+  const rightEye = THREE.MathUtils.clamp(1 - (distance(386, 374) * 2 / Math.max(distance(362, 263), 1e-5)), 0, 1);
+  expressionManager.setValue("aa", mouth);
+  expressionManager.setValue("blinkLeft", leftEye);
+  expressionManager.setValue("blinkRight", rightEye);
+  return 3;
+}
+
+function applyCameraHands(result, alignment) {
+  let applied = 0;
+  const hands = Array.isArray(result?.handLandmarks) ? result.handLandmarks : [];
+  const handedness = Array.isArray(result?.handedness) ? result.handedness : [];
+  for (let index = 0; index < hands.length; index += 1) {
+    const label = handedness[index]?.[0]?.categoryName;
+    // HandLandmarker labels are defined for a mirrored selfie image. The
+    // detector receives the raw video frame here, so the labels must swap.
+    const side = label === "Left" ? "right" : label === "Right" ? "left" : "";
+    if (!side) continue;
+    const prefix = side;
+    applied += applyCameraHandOrientation(`${prefix}Hand`, hands[index], alignment, side) ? 1 : 0;
+    const map = [
+      [`${prefix}IndexIntermediate`, 5, 6, 7], [`${prefix}IndexDistal`, 6, 7, 8],
+      [`${prefix}MiddleIntermediate`, 9, 10, 11], [`${prefix}MiddleDistal`, 10, 11, 12],
+      [`${prefix}RingIntermediate`, 13, 14, 15], [`${prefix}RingDistal`, 14, 15, 16],
+      [`${prefix}LittleIntermediate`, 17, 18, 19], [`${prefix}LittleDistal`, 18, 19, 20],
+    ];
+    for (const [slot, a, b, c] of map) {
+      applied += applyCameraFinger(slot, hands[index], a, b, c, alignment) ? 1 : 0;
+    }
+  }
+  return applied;
+}
+
+function applyCameraCapturePose(result) {
+  const landmarks = getCameraCaptureLandmarkSet(result);
+  if (!landmarks.length || !vrmPreviewVrm?.humanoid) {
+    return false;
+  }
+
+  // Capture is a pose target, not an incremental animation. Start each frame
+  // from the same VRM rest pose so rotations do not accumulate.
+  restorePreviewRestPose();
+  const alignment = createCameraCaptureAlignment(result);
+  const point = (index) => {
+    const rawPoint = convertCameraLandmark(landmarks[index]);
+    return rawPoint && alignment
+      ? rawPoint.applyMatrix4(alignment.transform)
+      : rawPoint;
+  };
+  const leftShoulder = point(11);
+  const rightShoulder = point(12);
+  const leftElbow = point(13);
+  const rightElbow = point(14);
+  const leftWrist = point(15);
+  const rightWrist = point(16);
+  const nose = point(0);
+  let appliedCount = 0;
+
+  appliedCount += applyCameraBoneDirection("chest", leftShoulder, rightShoulder, [-1, 0, 0]) ? 1 : 0;
+  appliedCount += applyCameraNeck("neck", leftShoulder, rightShoulder, nose) ? 1 : 0;
+  appliedCount += applyCameraArmIk("left", leftShoulder, leftElbow, leftWrist) ? 1 : 0;
+  appliedCount += applyCameraArmIk("right", rightShoulder, rightElbow, rightWrist) ? 1 : 0;
+  // Pose landmarks 17 and 18 are the left/right pinky anchors. Use the
+  // anatomical parent-to-child direction for the hand bones as well.
+  appliedCount += applyCameraBoneDirection("leftHand", leftWrist, point(17), [0, 0, 1]) ? 1 : 0;
+  appliedCount += applyCameraBoneDirection("rightHand", rightWrist, point(18), [0, 0, 1]) ? 1 : 0;
+  appliedCount += applyCameraHands(result, alignment);
+  appliedCount += applyCameraFace(result);
+
+  if (cameraCapturePoseFrameCount < 5 || cameraCapturePoseFrameCount % 30 === 0) {
+    debugCameraCapture("camera capture applied to VRM", {
+      frame: cameraCapturePoseFrameCount,
+      poseLandmarks: landmarks.length,
+      hands: result?.handLandmarks?.length ?? 0,
+      face: result?.faceLandmarks?.[0]?.length ?? 0,
+      appliedCount,
+    });
+  }
+  cameraCapturePoseFrameCount += 1;
+  return appliedCount > 0;
 }
 
 function applyCameraCaptureSnapshotPose(capture) {
@@ -2805,12 +3584,17 @@ function applyCameraCaptureSnapshotPose(capture) {
   }
 
   const result = {
-    poseWorldLandmarks: Array.isArray(capture.poseWorldLandmarks) && capture.poseWorldLandmarks.length
-      ? [capture.poseWorldLandmarks]
-      : [],
     poseLandmarks: Array.isArray(capture.poseLandmarks) && capture.poseLandmarks.length
       ? [capture.poseLandmarks]
       : [],
+    poseWorldLandmarks: Array.isArray(capture.poseWorldLandmarks) && capture.poseWorldLandmarks.length
+      ? [capture.poseWorldLandmarks]
+      : [],
+    handLandmarks: Array.isArray(capture.handLandmarks) ? capture.handLandmarks : [],
+    handWorldLandmarks: Array.isArray(capture.handWorldLandmarks) ? capture.handWorldLandmarks : [],
+    handedness: Array.isArray(capture.handedness) ? capture.handedness : [],
+    faceLandmarks: Array.isArray(capture.faceLandmarks) ? capture.faceLandmarks : [],
+    faceBlendshapes: Array.isArray(capture.faceBlendshapes) ? capture.faceBlendshapes : [],
   };
 
   return applyCameraCapturePose(result);
@@ -3030,6 +3814,30 @@ function normalizeBoneKey(value) {
     .replace(/[\s_-]+/g, "");
 }
 
+function formatBonePreviewLabel(key) {
+  const value = String(key || "").trim();
+  if (!value) {
+    return "";
+  }
+  if (value === "hips") {
+    return "Hips";
+  }
+  if (value === "chest") {
+    return "Chest";
+  }
+  if (value === "neck") {
+    return "Neck";
+  }
+  if (value === "head") {
+    return "Head";
+  }
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/(^|[_\s-]+)([a-z])/g, (_, __, chr) => chr.toUpperCase())
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function isVrmaSource(source) {
   return typeof source === "string" && /\.vrma(\?.*)?$/i.test(source);
 }
@@ -3048,6 +3856,13 @@ function getVrmaMotionLoader() {
     vrmaMotionLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
   }
   return vrmaMotionLoader;
+}
+
+function stopVrmaPreviewActions() {
+  for (const runtime of vrmaMotionRuntimeCache.values()) {
+    runtime?.action?.stop?.();
+    runtime?.mixer?.stopAllAction?.();
+  }
 }
 
 const VRMA_BONE_SLOT_MAP = {
@@ -3860,12 +4675,14 @@ async function init() {
   refs.boneResolveSummary = document.getElementById("boneResolveSummary");
   refs.bonePreviewPanel = document.getElementById("bonePreviewPanel");
   refs.bonePreviewCanvas = document.getElementById("bonePreviewCanvas");
+  refs.bonePreviewLabelLayer = document.getElementById("bonePreviewLabelLayer");
   refs.bonePreviewNote = document.getElementById("bonePreviewNote");
   refs.playButton = document.getElementById("playButton");
   refs.pauseButton = document.getElementById("pauseButton");
   refs.stopButton = document.getElementById("stopButton");
   refs.loopButton = document.getElementById("loopButton");
   refs.bonePreviewToggleButton = document.getElementById("bonePreviewToggleButton");
+  refs.bonePreviewCaptureSwapButton = document.getElementById("bonePreviewCaptureSwapButton");
   refs.saveButton = document.getElementById("saveButton");
   refs.loadButton = document.getElementById("loadButton");
   refs.clearLocalSaveButton = document.getElementById("clearLocalSaveButton");
@@ -3896,6 +4713,7 @@ async function init() {
 
   setupVrmPreview();
   bonePreviewCanvas = refs.bonePreviewCanvas;
+  bonePreviewLabelLayer = refs.bonePreviewLabelLayer;
   setupBonePreview();
   initializePreviewSplitWidth();
   state.loadedVrmName = STANDARD_VRM_LABEL;
@@ -3957,7 +4775,7 @@ async function init() {
       return;
     }
 
-    const nextName = window.prompt("Camera motion name", sourceMotion.displayName || sourceMotion.alias || sourceMotion.id);
+    const nextName = window.prompt("Camera motion name", state.cameraCaptureName || "VRMA-Capture");
     if (!nextName || !nextName.trim()) {
       return;
     }
@@ -4075,6 +4893,12 @@ async function init() {
 
   refs.bonePreviewToggleButton.addEventListener("click", () => {
     state.showBonePreview = !state.showBonePreview;
+    updateBonePreviewVisibility();
+    renderBonePreviewFrame();
+  });
+
+  refs.bonePreviewCaptureSwapButton?.addEventListener("click", () => {
+    state.bonePreviewCaptureSwap = !state.bonePreviewCaptureSwap;
     updateBonePreviewVisibility();
     renderBonePreviewFrame();
   });
