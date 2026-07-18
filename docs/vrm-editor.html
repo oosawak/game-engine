@@ -885,6 +885,7 @@
         <span class="action-pill" id="saveStatus">No local save</span>
         <button class="mini-button">Preset Pose</button>
         <button class="mini-button" id="loadVrmButton" type="button">Load VRM</button>
+        <button class="mini-button" id="textToVrmaButton" type="button">Text-To-VRMA</button>
         <input id="vrmFileInput" type="file" accept=".vrm,.glb,.gltf" hidden />
         <input id="datasetFileInput" type="file" accept=".json,.vrma" hidden />
         <button class="mini-button" id="saveButton" type="button">Save</button>
@@ -933,6 +934,11 @@
               <button class="mini-button" id="exportDatasetButton" type="button">Export</button>
               <button class="mini-button" id="importDatasetButton" type="button">Import</button>
               <button class="mini-button" id="clearMotionSelectionButton" type="button">Clear</button>
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Text-To-VRMA URL</span><span>Localhost</span></div>
+              <input id="textToVrmaUrlInput" class="input" type="url" placeholder="http://127.0.0.1:4173/" />
+              <button class="mini-button active" id="textToVrmaOpenButton" type="button" style="width: 100%;">Open Text-To-VRMA</button>
             </div>
             <div class="filter-row" id="tagFilters"></div>
           </div>

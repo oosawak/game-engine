@@ -57,6 +57,7 @@ const state = {
   loadedVrmToken: 0,
   datasetId: "dataset2",
   datasetLabel: "Dataset 2",
+  textToVrmaUrl: "http://127.0.0.1:4173/",
   boneMap: {
     hips: "",
     spine: "",
@@ -145,6 +146,8 @@ const DATASET_SAVE_PREFIX = "game-engine.vrm-editor.dataset.v1.";
 const STORAGE_SCHEMA_VERSION = 3;
 const LEGACY_STORAGE_KEYS = ["game-engine.vrm-editor.v1", "game-engine.vrm-editor.v2"];
 const CAMERA_CAPTURE_DEBUG = false;
+const TEXT_TO_VRMA_URL_KEY = "game-engine.vrm-editor.text-to-vrma-url.v1";
+const DEFAULT_TEXT_TO_VRMA_URL = "http://127.0.0.1:4173/";
 const MEDIAPIPE_VISION_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
 const MEDIAPIPE_POSE_MODEL = "./landmarkerModel/pose_landmarker_full.task";
 const MEDIAPIPE_HAND_MODEL = "./landmarkerModel/hand_landmarker.task";
@@ -202,6 +205,47 @@ function readJsonStorage(key) {
 
 function writeJsonStorage(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
+}
+
+function normalizeTextToVrmaUrl(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return DEFAULT_TEXT_TO_VRMA_URL;
+  }
+
+  try {
+    const url = new URL(raw);
+    const pathname = url.pathname.endsWith("/") ? url.pathname : `${url.pathname}/`;
+    return `${url.origin}${pathname}`;
+  } catch {
+    return DEFAULT_TEXT_TO_VRMA_URL;
+  }
+}
+
+function loadTextToVrmaUrl() {
+  try {
+    return normalizeTextToVrmaUrl(localStorage.getItem(TEXT_TO_VRMA_URL_KEY));
+  } catch {
+    return DEFAULT_TEXT_TO_VRMA_URL;
+  }
+}
+
+function saveTextToVrmaUrl(value) {
+  try {
+    localStorage.setItem(TEXT_TO_VRMA_URL_KEY, normalizeTextToVrmaUrl(value));
+  } catch {
+    // Ignore localStorage write failures.
+  }
+}
+
+function openTextToVrmaTool() {
+  const targetUrl = normalizeTextToVrmaUrl(state.textToVrmaUrl);
+  const opened = window.open(targetUrl, "_blank", "noopener,noreferrer");
+  if (!opened) {
+    state.saveStatus = "Popup blocked";
+    state.error = `Open ${targetUrl} manually if the browser blocked the new tab.`;
+    render();
+  }
 }
 
 function loadDatasetRegistry() {
@@ -4650,6 +4694,8 @@ async function init() {
   refs.cameraCaptureStopButton = document.getElementById("cameraCaptureStopButton");
   refs.cameraCaptureCreateButton = document.getElementById("cameraCaptureCreateButton");
   refs.vrmaRuntimeSummary = document.getElementById("vrmaRuntimeSummary");
+  refs.textToVrmaUrlInput = document.getElementById("textToVrmaUrlInput");
+  refs.textToVrmaOpenButton = document.getElementById("textToVrmaOpenButton");
   refs.boneMapHips = document.getElementById("boneMapHips");
   refs.boneMapSpine = document.getElementById("boneMapSpine");
   refs.boneMapChest = document.getElementById("boneMapChest");
@@ -4686,6 +4732,7 @@ async function init() {
   refs.saveButton = document.getElementById("saveButton");
   refs.loadButton = document.getElementById("loadButton");
   refs.clearLocalSaveButton = document.getElementById("clearLocalSaveButton");
+  refs.textToVrmaButton = document.getElementById("textToVrmaButton");
   refs.exportDatasetButton = document.getElementById("exportDatasetButton");
   refs.importDatasetButton = document.getElementById("importDatasetButton");
   refs.clearMotionSelectionButton = document.getElementById("clearMotionSelectionButton");
@@ -4709,6 +4756,10 @@ async function init() {
   if (registryDatasetId) {
     state.datasetId = registryDatasetId;
     state.datasetLabel = getDatasetSourceEntry(registryDatasetId).label;
+  }
+  state.textToVrmaUrl = loadTextToVrmaUrl();
+  if (refs.textToVrmaUrlInput) {
+    refs.textToVrmaUrlInput.value = state.textToVrmaUrl;
   }
 
   setupVrmPreview();
@@ -4837,6 +4888,22 @@ async function init() {
   refs.clearLocalSaveButton.addEventListener("click", () => {
     clearSavedState();
     void loadDatasetManifest(state.datasetId);
+  });
+
+  refs.textToVrmaUrlInput?.addEventListener("input", () => {
+    state.textToVrmaUrl = normalizeTextToVrmaUrl(refs.textToVrmaUrlInput.value);
+    saveTextToVrmaUrl(state.textToVrmaUrl);
+    if (refs.textToVrmaUrlInput.value !== state.textToVrmaUrl) {
+      refs.textToVrmaUrlInput.value = state.textToVrmaUrl;
+    }
+  });
+
+  refs.textToVrmaOpenButton?.addEventListener("click", () => {
+    openTextToVrmaTool();
+  });
+
+  refs.textToVrmaButton?.addEventListener("click", () => {
+    openTextToVrmaTool();
   });
 
   refs.exportDatasetButton.addEventListener("click", () => {

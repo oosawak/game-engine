@@ -7,6 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "export:web": "node scripts/export-web.mjs",
+    "serve:text-to-vrma": "node scripts/serve-text-to-vrma.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
