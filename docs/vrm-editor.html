@@ -441,6 +441,35 @@
       line-height: 1.6;
     }
 
+    .motion-section {
+      display: grid;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .motion-section-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .motion-section-header span:last-child {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
     .preview {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto auto;
@@ -630,6 +659,10 @@
       flex-wrap: wrap;
     }
 
+    .controls .group.inline-actions {
+      flex-wrap: nowrap;
+    }
+
     .details {
       display: grid;
       gap: 10px;
@@ -744,6 +777,34 @@
       height: 100%;
       display: block;
       cursor: zoom-in;
+    }
+
+    .bone-preview-label-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .bone-preview-label {
+      position: absolute;
+      transform: translate(-50%, -120%);
+      padding: 4px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(108, 193, 255, 0.3);
+      background: rgba(9, 13, 20, 0.8);
+      color: #a8dfff;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+      display: none;
+    }
+
+    .bone-preview-label.is-main {
+      color: #f8d48a;
+      border-color: rgba(255, 202, 108, 0.35);
     }
 
     .bone-preview-note {
@@ -868,10 +929,10 @@
               </div>
             </div>
             <input id="motionSearch" class="search-input" type="search" placeholder="Search by id / alias / name" />
-            <div class="group">
-              <button class="mini-button" id="exportDatasetButton" type="button">Export JSON</button>
-              <button class="mini-button" id="importDatasetButton" type="button">Import JSON</button>
-              <button class="mini-button" id="clearMotionSelectionButton" type="button">Clear Motion</button>
+            <div class="group inline-actions">
+              <button class="mini-button" id="exportDatasetButton" type="button">Export</button>
+              <button class="mini-button" id="importDatasetButton" type="button">Import</button>
+              <button class="mini-button" id="clearMotionSelectionButton" type="button">Clear</button>
             </div>
             <div class="filter-row" id="tagFilters"></div>
           </div>
@@ -890,6 +951,7 @@
           <div class="preview-toolbar">
             <div class="group">
               <button class="mini-button active" id="bonePreviewToggleButton" type="button">Bone Preview On</button>
+              <button class="mini-button" id="bonePreviewCaptureSwapButton" type="button">Capture Swap Off</button>
               <button class="mini-button active" type="button" data-scene-camera="front">Front</button>
               <button class="mini-button" type="button" data-scene-camera="side">Side</button>
               <button class="mini-button" type="button" data-scene-camera="orbit">Orbit</button>
@@ -906,6 +968,7 @@
                 <div class="field-label"><span>Bone Preview</span><span>Full hierarchy</span></div>
                 <div class="bone-preview-stage">
                   <canvas id="bonePreviewCanvas"></canvas>
+                  <div class="bone-preview-label-layer" id="bonePreviewLabelLayer"></div>
                   <div class="bone-preview-note" id="bonePreviewNote">Loading bones...</div>
                 </div>
               </div>
