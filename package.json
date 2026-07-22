@@ -6,6 +6,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
+    "setup:ardy-engine": "node scripts/bootstrap-ardy-engine.mjs",
+    "serve:ardy-engine": "node scripts/launch-ardy-engine.mjs",
     "export:web": "node scripts/export-web.mjs",
     "serve:text-to-vrma": "node scripts/launch-text-to-vrma.mjs",
     "serve:text-to-vrma:static": "node scripts/serve-text-to-vrma.mjs",
